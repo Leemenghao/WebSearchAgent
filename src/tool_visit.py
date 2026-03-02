@@ -70,7 +70,7 @@ class Visit(BaseTool):
         # 使用阿里百炼（DashScope）兼容 OpenAI 接口
         api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
         api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        summary_model = os.getenv("DASHSCOPE_SUMMARY_MODEL", "qwen-plus")
+        summary_model = os.getenv("DASHSCOPE_SUMMARY_MODEL", "qwen3-max")
 
         client = OpenAI(
             api_key=api_key,

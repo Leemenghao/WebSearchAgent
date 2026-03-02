@@ -33,7 +33,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent   # ali_agent_2602/
 DEFAULT_QUESTION = str(_ROOT / "data" / "question.jsonl")
 DEFAULT_PRED = ""   # 需由命令行传入或修改此处
-DEFAULT_OUTPUT = str(_ROOT / "submit" / "submit.jsonl")
+DEFAULT_OUTPUT = ""  # 默认与 --pred 同目录，文件名为 submit.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -116,7 +116,7 @@ def main():
     parser.add_argument("--question", default=DEFAULT_QUESTION,
                         help="比赛题目 JSONL 路径（默认 data/question.jsonl）")
     parser.add_argument("--output", default=DEFAULT_OUTPUT,
-                        help="输出提交文件路径（默认 submit/submit.jsonl）")
+                        help="输出提交文件路径")
     parser.add_argument("--normalize", action="store_true",
                         help="对答案做归一化（转小写、数字取整），默认不做（保留原始预测）")
     args = parser.parse_args()
@@ -131,10 +131,12 @@ def main():
         print(f"错误：题目文件不存在: {args.question}", file=sys.stderr)
         sys.exit(1)
 
+    output = args.output if args.output else str(Path(args.pred).parent / "submit.jsonl")
+
     extract(
         question_path=args.question,
         pred_path=args.pred,
-        output_path=args.output,
+        output_path=output,
         do_normalize=args.normalize,
     )
 
