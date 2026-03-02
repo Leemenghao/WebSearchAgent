@@ -1,0 +1,10 @@
+[project]
+name = "ali-agent-2602"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "qwen-agent[code-interpreter,gui,mcp,rag]>=0.0.34",
+    "soundfile>=0.13.1",
+    "transformers>=5.2.0",
+]
