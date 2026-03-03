@@ -37,7 +37,7 @@ class MultiTurnReactAgent(FnCallAgent):
         self.llm_local_path = llm["model"]
         self.model_type = llm.get("model_type", "")
 
-    def call_server(self, msgs, max_tries=10):
+    def call_server(self, msgs, model: str, max_tries=10):
         # 使用阿里百炼（DashScope）兼容 OpenAI 接口
         api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
         api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -55,7 +55,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 if enable_thinking:
                     # 流式调用，支持思考模式（reasoning_content）
                     completion = client.chat.completions.create(
-                        model=self.model,
+                        model=model,
                         messages=msgs,
                         extra_body={"enable_thinking": True},
                         stream=True,
@@ -91,7 +91,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 else:
                     # 普通非流式调用
                     chat_response = client.chat.completions.create(
-                        model=self.model,
+                        model=model,
                         messages=msgs,
                         stop=["\n<tool_response>", "<tool_response>"],
                         temperature=self.llm_generate_cfg.get('temperature', 0.6),
@@ -211,7 +211,7 @@ class MultiTurnReactAgent(FnCallAgent):
                     plan=json.dumps(steps, ensure_ascii=False, indent=2)
                 )}
             ]
-            checked = self._decomposer_call(checker_msgs, model=checker_model)
+            checked = self._decomposer_call(checker_msgs, model=checker_model, enable_thinking=True, thinking_budget=2048)
             if checked:
                 checked = checked.strip()
                 if checked.startswith("```"):
@@ -238,8 +238,9 @@ class MultiTurnReactAgent(FnCallAgent):
         print(f"[decomposer] Plan ({len(steps)} steps):\n{plan_text}")
         return plan_text
 
-    def update_scratchpad(self, question: str, plan_text: str, pending_results: list) -> None:
-        """每3次工具调用触发：用 SCRATCHPAD_MODEL 提炼已知事实，更新 self.scratchpad。"""
+    def update_scratchpad(self, question: str, plan_text: str, pending_results: list,
+                           current_scratchpad: str) -> str:
+        """每3次工具调用触发：用 SCRATCHPAD_MODEL 提炼已知事实，返回更新后的 scratchpad 字符串。"""
         from prompt import SCRATCHPAD_PROMPT
 
         scratchpad_model = os.getenv("SCRATCHPAD_MODEL", "qwen3.5-plus")
@@ -248,18 +249,19 @@ class MultiTurnReactAgent(FnCallAgent):
         msgs = [{"role": "user", "content": SCRATCHPAD_PROMPT.format(
             question=question,
             plan=plan_text or "(no plan)",
-            previous_scratchpad=self.scratchpad or "(none yet)",
+            previous_scratchpad=current_scratchpad or "(none yet)",
             new_tool_results=results_text,
         )}]
 
         new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True)
         if new_facts and len(new_facts.strip()) > 10:
-            self.scratchpad = new_facts.strip()
-            print(f"[scratchpad] Updated ({len(self.scratchpad)} chars):\n{self.scratchpad}\n")
+            new_scratchpad = new_facts.strip()
+            print(f"[scratchpad] Updated ({len(new_scratchpad)} chars):\n{new_scratchpad}\n")
+            return new_scratchpad
+        return current_scratchpad
 
     def _run(self, data: str, model: str, user_prompt: str, **kwargs) -> List[List[Message]]:
-        self.model = model
-        self.scratchpad = ""          # 搜索黑板（每3次工具调用更新）
+        scratchpad = ""              # 搜索黑板（局部变量，避免线程竞争）
         tool_call_count = 0           # 工具调用总次数
         pending_tool_results = []     # 上次黑板更新后新增的工具结果
         try:
@@ -269,20 +271,19 @@ class MultiTurnReactAgent(FnCallAgent):
             question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg 
 
         answer = data['item'].get('answer', '')
-        self.user_prompt = user_prompt
         # 前置问题分解：对复杂问题生成解题计划，注入到 prompt 头部
         plan_text = self.decompose_question(question)
         if plan_text:
-            user_prompt = self.user_prompt + question + plan_text
+            final_user_prompt = user_prompt + question + plan_text
         else:
-            user_prompt = self.user_prompt + question
-        messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": user_prompt}]
+            final_user_prompt = user_prompt + question
+        messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": final_user_prompt}]
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0
         while num_llm_calls_available > 0:
             round += 1
             num_llm_calls_available -= 1
-            content = self.call_server(messages)
+            content = self.call_server(messages, model=model)
             print(f'Round {round}: {content}')
             if '<tool_response>' in content:
                 pos = content.find('<tool_response>')
@@ -311,14 +312,14 @@ class MultiTurnReactAgent(FnCallAgent):
                     f"Result: {result[:3000]}"
                 )
                 if tool_call_count % 3 == 0:
-                    self.update_scratchpad(question, plan_text, pending_tool_results)
+                    scratchpad = self.update_scratchpad(question, plan_text, pending_tool_results, scratchpad)
                     pending_tool_results = []
-                    if self.scratchpad:
+                    if scratchpad:
                         # 黑板注入 system message（语义正确：背景知识/指令层）
                         messages[0]["content"] = (
                             self.system_message
                             + "\n\n## 📋 Current Research Facts (Scratchpad)\n"
-                            + self.scratchpad
+                            + scratchpad
                             + "\n"
                         )
                         # 同时在最新 tool_response 末尾追加简短 reminder，
@@ -346,7 +347,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 print(f"Token count exceeds limit: {token_count} > {max_tokens}")
                 
                 messages[-1]['content'] = "You have now reached the maximum context length you can handle. You should stop making tool calls and, based on all the information above, think again and provide what you consider the most likely answer in the following format:<think>your final thinking</think>\n<answer>your answer</answer>\n\nRemember: the content inside <answer>...</answer> must be pure text only — a concise noun, name, or number with NO explanation or extra sentences. If the answer is a number, give the integer value only. Match the language of the question."
-                content = self.call_server(messages)
+                content = self.call_server(messages, model=model)
                 messages.append({"role": "assistant", "content": content.strip()})
                 if '<answer>' in content and '</answer>' in content:
                     prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
