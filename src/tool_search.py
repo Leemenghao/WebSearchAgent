@@ -63,10 +63,6 @@ class Search(BaseTool):
         else:
             return f"Google search failed after {max_retries} retries (rate limit)."
 
-        if response.status_code == 400 and 'credits' in response.text.lower():
-            # Serper.dev 额度耗尽，快速返回可读错误，不让 Agent 崩溃
-            print(f"[search] Serper credits exhausted: {response.text}")
-            return f"Search unavailable: API credits exhausted. Please top up Serper.dev account."
         if response.status_code != 200:
             raise Exception(f"Error: {response.status_code} - {response.text}")
 

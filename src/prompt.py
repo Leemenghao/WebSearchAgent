@@ -1,60 +1,3 @@
-ACTION_FORCE_THRESHOLD = 2  # 连续无行动轮数阈值，达到后注入强制行动提示
-
-ACTION_FORCE_MSG = (
-    "WARNING: You have produced no tool calls and no answer for "
-    f"{ACTION_FORCE_THRESHOLD} consecutive rounds. "
-    "You MUST immediately either:\n"
-    "  1. Call a tool using <tool_call>{{...}}</tool_call> to gather missing information, OR\n"
-    "  2. Output your best answer using <answer>...</answer>.\n"
-    "Do NOT output pure reasoning text again. Take action now."
-)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Question Decomposer prompts
-# 用于将复杂多跳问题拆解为有序子任务的两轮思考拆解器
-# ──────────────────────────────────────────────────────────────────────────────
-
-DECOMPOSER_PROMPT = """You are an expert research planner specializing in multi-hop questions.
-Decompose the given question into a minimal sequence of clear, directly web-searchable sub-tasks.
-
-**Rules**:
-- Every implicit reference ("his birthplace", "the founder", "that year", etc.) must become an explicit lookup step.
-- Order steps so all dependencies come before the steps that rely on them.
-- Each step must be independently web-searchable — no compound ambiguous lookups in one step.
-- Maximum 6 steps; merge trivial steps where safe.
-- Output ONLY a JSON array. No markdown fences, no extra text.
-
-**JSON schema** (each element):
-{{"step": <int>, "task": "<what to search/verify>", "depends_on": [<step ints that must be resolved first>]}}
-
-**Example**:
-Question: "在一片辽阔的土地上，有一家以"智翼"为象征的机构，它专注于破解协助农民与自然沟通的难题，并提出了使用飞翔者的理念。这些"飞翔者"看似微小，实则被赋予了能够穿越云层和田野的能力，为丰收季节带来了转型的曙光。尽管它并未来自最早在空中舞动翅膀的巨头，其精神意涵却与一家声名远扬的"天空舞者"的传统格外相似。他的老板出生那一年中国男子羽毛球队首次夺得汤姆斯杯。出生地的许多人对一个有身份证的神明非常敬仰。那么，这家关注农作物与智慧科技的机构起始在哪个城市呢？"
-
-[
-  {{"step": 1, "task": "Search: what year did China men's badminton team win the Thomas Cup for the FIRST time ever", "depends_on": []}},
-  {{"step": 2, "task": "Search: which Chinese deity or god is famous for having an officially government-issued ID card (身份证), and which city/region is most associated with worshipping this deity", "depends_on": []}},
-  {{"step": 3, "task": "Search: which well-known Chinese aerial or drone company is nicknamed or described as '天空舞者' (sky dancer), excluding DJI (大疆) which is identified as the earliest dominant giant", "depends_on": []}},
-  {{"step": 4, "task": "Search: Chinese agricultural drone company (农业无人机) using '智翼' as its symbol, whose founder/CEO was born in [year from step 1] in [city/region from step 2]; must NOT be DJI; cross-reference with the company found in step 3 for verification", "depends_on": [1, 2, 3]}},
-  {{"step": 5, "task": "Search: founding city or starting city of the company identified in step 4", "depends_on": [4]}}
-]
-
-Now decompose the following question:
-Question: {question}"""
-
-
-DECOMPOSER_REFINE_PROMPT = """Review and refine the decomposition plan below. Verify that:
-1. Every implicit reference ("his birthplace", "the founder", "that year", etc.) is resolved by an earlier explicit step.
-2. Steps are in correct dependency order — no step uses information not yet obtained.
-3. Each step is directly and independently web-searchable.
-4. No redundant or duplicate steps exist.
-
-Previous plan:
-{previous_plan}
-
-Output ONLY the refined JSON array. No markdown fences, no extra text."""
-
-
 SYSTEM_PROMPT_MULTI = '''You are a Web Information Seeking Master. Your task is to thoroughly seek the internet for information and provide accurate answers to questions. No matter how complex the query, you will not give up until you find the corresponding information.
 
 As you proceed, adhere to the following principles:
@@ -128,22 +71,25 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
 }
 </tools>
 
-The assistant solves the question by calling one or more tools in sequence, then provides a final answer. Tool calls, tool responses, and the final answer are enclosed within their respective tags.
+The assistant starts with one or more cycles of (thinking about which tool to use -> performing tool call -> waiting for tool response), and ends with (thinking about the answer -> answer of the question). The thinking processes, tool calls, tool responses, and answer are enclosed within their tags. There could be multiple thinking processes, tool calls, tool call parameters and tool response parameters.
 
 Example response:
+<think> thinking process here </think>
 <tool_call>
 {"name": "tool name here", "arguments": {"parameter name here": parameter value here, "another parameter name here": another parameter value here, ...}}
 </tool_call>
 <tool_response>
 tool_response here
 </tool_response>
+<think> thinking process here </think>
 <tool_call>
 {"name": "another tool name here", "arguments": {...}}
 </tool_call>
 <tool_response>
 tool_response here
 </tool_response>
-(more tool calls and tool responses here)
+(more thinking processes, tool calls and tool responses here)
+<think> thinking process here </think>
 <answer> answer here </answer>
 
 **Critical Answer Format Requirements:**
