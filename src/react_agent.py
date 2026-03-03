@@ -350,6 +350,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 messages.append({"role": "assistant", "content": content.strip()})
                 if '<answer>' in content and '</answer>' in content:
                     prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
+                    answer = prediction
                     termination = 'generate an answer as token limit reached'
                 else:
                     prediction = messages[-1]['content']
@@ -366,6 +367,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
         if '<answer>' in messages[-1]['content']:
             prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
+            answer = prediction
             termination = 'answer'
         else:
             prediction = 'No answer found.'
