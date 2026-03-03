@@ -7,8 +7,7 @@ import threading
 from datetime import datetime
 from react_agent import MultiTurnReactAgent
 from prompt import SYSTEM_PROMPT_MULTI, USER_PROMPT
-from tool_search import *
-from tool_visit import * 
+from tool_bailian_search import *
 
 try:
     from dotenv import load_dotenv
@@ -145,7 +144,7 @@ if __name__ == "__main__":
         
         test_agent = MultiTurnReactAgent(
             llm=llm_cfg,
-            function_list=["search", "visit"],
+            function_list=["search"],
             system_message=system_message
         )
 

@@ -30,7 +30,7 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
 <tools>
 {
   "name": "search",
-  "description": "Performs batched web searches: supply an array 'query'; the tool retrieves the top 10 results for each query in one call.",
+  "description": "Performs batched web searches via Alibaba Bailian real-time search: supply an array 'query'; the tool retrieves the top 10 results for each query in one call.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -45,28 +45,6 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
     "required": [
       "query"
     ]
-    }
-},
-{
-  "name": "visit",
-    "description": "Visit webpage(s) and return the summary of the content.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "The URL(s) of the webpage(s) to visit. Can be a single URL or an array of URLs."
-            },
-            "goal": {
-                "type": "string",
-                "description": "The specific information goal for visiting webpage(s)."
-            }
-        },
-        "required": [
-            "url",
-            "goal"
-        ]
     }
 }
 </tools>

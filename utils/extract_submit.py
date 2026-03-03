@@ -38,7 +38,12 @@ DEFAULT_OUTPUT = ""  # 默认与 --pred 同目录，文件名 submit.jsonl
 
 
 def normalize(text: str) -> str:
-    """答案归一化：去空格 -> 转小写 -> 纯数字转整数"""
+    """比赛评测对齐的标准预处理：
+    1. 去除首尾空格
+    2. 转小写
+    3. 纯数字（含小数）取整数
+    4. 多实体：逗号或分号后补齐一个空格
+    """
     t = text.strip().lower()
     # 纯数字（含小数）-> 整数
     if re.fullmatch(r"-?\d+(\.\d+)?", t):
@@ -46,6 +51,10 @@ def normalize(text: str) -> str:
             t = str(int(float(t)))
         except ValueError:
             pass
+        return t
+    # 多实体：逗号 / 分号后确保恰好一个空格
+    t = re.sub(r'([,;])\s*', r'\1 ', t)
+    t = t.strip()
     return t
 
 
@@ -83,8 +92,7 @@ def load_predictions(path: str) -> dict[str, str]:
     return preds
 
 
-def extract(question_path: str, pred_path: str, output_path: str,
-            do_normalize: bool = False) -> None:
+def extract(question_path: str, pred_path: str, output_path: str) -> None:
     questions = load_questions(question_path)   # list[(id, question)]
     preds = load_predictions(pred_path)
 
@@ -96,7 +104,7 @@ def extract(question_path: str, pred_path: str, output_path: str,
             pred = preds.get(q, "")
             if pred == "":
                 missing_ids.append(qid)
-            answer = normalize(pred) if do_normalize else pred.strip()
+            answer = normalize(pred)  # 始终执行归一化
             record = {"id": qid, "answer": answer}
             fout.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -116,9 +124,7 @@ def main():
     parser.add_argument("--question", default=DEFAULT_QUESTION,
                         help="比赛题目 JSONL 路径（默认 data/question.jsonl）")
     parser.add_argument("--output", default=DEFAULT_OUTPUT,
-                        help="输出提交文件路径（默认 submit/submit.jsonl）")
-    parser.add_argument("--normalize", action="store_true",
-                        help="对答案做归一化（转小写、数字取整），默认不做（保留原始预测）")
+                        help="输出提交文件路径（默认与 pred 同目录）")
     args = parser.parse_args()
 
     if not args.pred:
@@ -138,7 +144,6 @@ def main():
         question_path=args.question,
         pred_path=args.pred,
         output_path=output_path,
-        do_normalize=args.normalize,
     )
 
 
