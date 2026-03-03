@@ -131,15 +131,45 @@ class MultiTurnReactAgent(FnCallAgent):
         
         return len(tokenizer.encode(full_prompt))
 
+    def _decomposer_call(self, msgs: list, model: str, max_tries: int = 3) -> str:
+        """专用于分解器的 LLM 调用：非流式、开启 thinking、丢弃 thinking 内容只返回正文。"""
+        api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
+        api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        client = OpenAI(api_key=api_key, base_url=api_base)
+
+        for attempt in range(max_tries):
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=msgs,
+                    extra_body={"enable_thinking": True},
+                    temperature=0.6,
+                )
+                msg = resp.choices[0].message
+                content = msg.content or ""
+                thinking = getattr(msg, "reasoning_content", None) or ""
+                if thinking:
+                    print(f"[decomposer][{model}] thinking length={len(thinking)} (discarded)")
+                if content:
+                    return content
+            except Exception as e:
+                print(f"[decomposer][{model}] attempt {attempt+1}/{max_tries} error: {e}")
+                if attempt == max_tries - 1:
+                    return ""
+        return ""
+
     def decompose_question(self, question: str) -> str:
         """两步问题分解：先拆解，再校验，返回格式化的解题计划字符串。失败时返回空字符串。"""
         from prompt import DECOMPOSER_PROMPT, CHECKER_PROMPT
 
-        # ── Step 1: 分解 ──────────────────────────────────────
+        decomposer_model = os.getenv("DECOMPOSER_MODEL", "qwen3.5-plus")
+        checker_model = os.getenv("CHECKER_MODEL", "qwen3.5-flash")
+
+        # ── Step 1: 分解（使用 DECOMPOSER_MODEL）─────────────
         decompose_msgs = [
             {"role": "user", "content": DECOMPOSER_PROMPT.format(question=question)}
         ]
-        raw_plan = self.call_server(decompose_msgs, max_tries=3)
+        raw_plan = self._decomposer_call(decompose_msgs, model=decomposer_model)
         if not raw_plan:
             return ""
 
@@ -167,14 +197,14 @@ class MultiTurnReactAgent(FnCallAgent):
 
         # 单步问题不走 checker
         if len(steps) > 1:
-            # ── Step 2: 校验 / 精炼 ───────────────────────────────
+            # ── Step 2: 校验 / 精炼（使用 CHECKER_MODEL）────────
             checker_msgs = [
                 {"role": "user", "content": CHECKER_PROMPT.format(
                     question=question,
                     plan=json.dumps(steps, ensure_ascii=False, indent=2)
                 )}
             ]
-            checked = self.call_server(checker_msgs, max_tries=3)
+            checked = self._decomposer_call(checker_msgs, model=checker_model)
             if checked:
                 checked = checked.strip()
                 if checked.startswith("```"):
