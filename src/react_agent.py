@@ -282,9 +282,11 @@ class MultiTurnReactAgent(FnCallAgent):
                 content = content[:pos]
             messages.append({"role": "assistant", "content": content.strip()})
             if '<tool_call>' in content and '</tool_call>' in content:
-                tool_call = content.split('<tool_call>')[1].split('</tool_call>')[0]
+                tool_call_str = content.split('<tool_call>')[1].split('</tool_call>')[0]
+                tool_name = ''
+                tool_args = {}
                 try:
-                    tool_call = json.loads(tool_call)
+                    tool_call = json.loads(tool_call_str)
                     tool_name = tool_call.get('name', '')
                     tool_args = tool_call.get('arguments', {})
                     result = self._call_tool(tool_name, tool_args)
