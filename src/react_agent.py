@@ -231,8 +231,30 @@ class MultiTurnReactAgent(FnCallAgent):
         print(f"[decomposer] Plan ({len(steps)} steps):\n{plan_text}")
         return plan_text
 
+    def update_scratchpad(self, question: str, plan_text: str, pending_results: list) -> None:
+        """每3次工具调用触发：用 SCRATCHPAD_MODEL 提炼已知事实，更新 self.scratchpad。"""
+        from prompt import SCRATCHPAD_PROMPT
+
+        scratchpad_model = os.getenv("SCRATCHPAD_MODEL", "qwen3.5-plus")
+        results_text = "\n\n---\n\n".join(pending_results) if pending_results else "(none)"
+
+        msgs = [{"role": "user", "content": SCRATCHPAD_PROMPT.format(
+            question=question,
+            plan=plan_text or "(no plan)",
+            previous_scratchpad=self.scratchpad or "(none yet)",
+            new_tool_results=results_text,
+        )}]
+
+        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2)
+        if new_facts and len(new_facts.strip()) > 10:
+            self.scratchpad = new_facts.strip()
+            print(f"[scratchpad] Updated ({len(self.scratchpad)} chars):\n{self.scratchpad}\n")
+
     def _run(self, data: str, model: str, user_prompt: str, **kwargs) -> List[List[Message]]:
         self.model = model
+        self.scratchpad = ""          # 搜索黑板（每3次工具调用更新）
+        tool_call_count = 0           # 工具调用总次数
+        pending_tool_results = []     # 上次黑板更新后新增的工具结果
         try:
             question = data['item']['question']
         except: 
@@ -270,6 +292,24 @@ class MultiTurnReactAgent(FnCallAgent):
                     result = 'Error: Tool call is not a valid JSON. Tool call must contain a valid "name" and "arguments" field.'
                 result = "<tool_response>\n" + result + "\n</tool_response>"
                 messages.append({"role": "user", "content": result})
+
+                # ── 搜索黑板：每 3 次工具调用更新一次已知事实 ──────────
+                tool_call_count += 1
+                pending_tool_results.append(
+                    f"[Tool={tool_name}]\nArgs: {json.dumps(tool_args, ensure_ascii=False)[:300]}\n"
+                    f"Result: {result[:3000]}"
+                )
+                if tool_call_count % 3 == 0:
+                    self.update_scratchpad(question, plan_text, pending_tool_results)
+                    pending_tool_results = []
+                    # 将黑板注入 system message（保留原始 system_message 不变）
+                    if self.scratchpad:
+                        messages[0]["content"] = (
+                            self.system_message
+                            + "\n\n## 📋 Current Research Facts (Scratchpad)\n"
+                            + self.scratchpad
+                            + "\n"
+                        )
             if '<answer>' in content and '</answer>' in content:
                 termination = 'answer'
                 break

@@ -177,6 +177,39 @@ Your task:
 """
 
 
+SCRATCHPAD_PROMPT = """You are a research fact recorder helping a multi-hop question answering agent.
+
+Your job: read the tool results below and produce an updated, concise list of CONFIRMED facts.
+
+## Original Question
+{question}
+
+## Research Plan
+{plan}
+
+## Previously Confirmed Facts
+{previous_scratchpad}
+
+## New Tool Results (since last update)
+{new_tool_results}
+
+## Instructions
+1. Keep all previously confirmed facts that are still valid.
+2. Extract NEW confirmed facts from the new tool results; ignore noise/ads/irrelevant content.
+3. If a new result corrects a previous fact, update it and note the correction.
+4. Each fact MUST be a single, specific, verifiable piece of information — NO speculation.
+5. Tag each fact with the research step it resolves, e.g. [Step 1].
+6. If a fact directly answers the original question, mark it with ★.
+7. Keep total output under 300 words.
+8. Output ONLY the bullet list — no headers, no explanation, no markdown fences.
+
+## Format
+• [Step N] Confirmed fact.
+• [Step N] Another confirmed fact.
+• ★ [Step N] This fact directly answers the question.
+"""
+
+
 JUDGE_PROMPT_QA = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"].
 First, I will give examples of each grade, and then you will grade a new example.
