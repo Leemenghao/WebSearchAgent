@@ -83,7 +83,7 @@ class Visit(BaseTool):
                     messages=msgs,
                     stop=["\n<tool_response>", "<tool_response>"],
                     temperature=0.7,
-                    timeout=60,
+                    timeout=120,
                 )
                 content = chat_response.choices[0].message.content
                 if content:

@@ -131,8 +131,9 @@ class MultiTurnReactAgent(FnCallAgent):
         
         return len(tokenizer.encode(full_prompt))
 
-    def _decomposer_call(self, msgs: list, model: str, max_tries: int = 3) -> str:
-        """专用于分解器的 LLM 调用：非流式、开启 thinking、丢弃 thinking 内容只返回正文。"""
+    def _decomposer_call(self, msgs: list, model: str, max_tries: int = 3,
+                         thinking_budget: int = 4096) -> str:
+        """专用于分解器的 LLM 调用：非流式、开启 thinking（预算受限）、丢弃 thinking 内容只返回正文。"""
         api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
         api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         client = OpenAI(api_key=api_key, base_url=api_base)
@@ -142,7 +143,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 resp = client.chat.completions.create(
                     model=model,
                     messages=msgs,
-                    extra_body={"enable_thinking": True},
+                    extra_body={"enable_thinking": True, "thinking_budget": thinking_budget},
                     temperature=0.6,
                 )
                 msg = resp.choices[0].message
@@ -245,7 +246,7 @@ class MultiTurnReactAgent(FnCallAgent):
             new_tool_results=results_text,
         )}]
 
-        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2)
+        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, thinking_budget=8192)
         if new_facts and len(new_facts.strip()) > 10:
             self.scratchpad = new_facts.strip()
             print(f"[scratchpad] Updated ({len(self.scratchpad)} chars):\n{self.scratchpad}\n")
