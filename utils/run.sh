@@ -1,7 +1,7 @@
 
 
 uv run python extract_submit.py \
-    --pred  /home/lmh/lee/competition/ali_agent_2602/output/qwen3-max_20260303_195957/qwen3-max/competition/iter1.jsonl \
+    --pred  /home/lmh/lee/competition/ali_agent_2602/output/qwen3-max_20260303_202755/qwen3-max/competition/iter1.jsonl \
     --question /home/lmh/lee/competition/ali_agent_2602/data/question.jsonl \
 
 

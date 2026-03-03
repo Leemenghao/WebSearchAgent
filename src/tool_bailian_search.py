@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import time
 from typing import List, Union
 
@@ -10,8 +11,22 @@ DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
 _MCP_URL = "https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp"
 _DEFAULT_COUNT = 10
 
+# 全局限速：最多 5 QPS，防止 20 个并发线程打爆配额
+_rate_lock = threading.Lock()
+_last_call_time = 0.0
+_MIN_INTERVAL = 0.25  # 秒，对应 4 QPS
+
 
 def bailian_search(query: str, count: int = _DEFAULT_COUNT) -> str:
+    global _last_call_time
+    # 全局限速：串行占用锁，确保两次调用间隔 >= _MIN_INTERVAL
+    with _rate_lock:
+        now = time.time()
+        gap = now - _last_call_time
+        if gap < _MIN_INTERVAL:
+            time.sleep(_MIN_INTERVAL - gap)
+        _last_call_time = time.time()
+
     headers = {
         "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
         "Content-Type": "application/json",
@@ -27,31 +42,47 @@ def bailian_search(query: str, count: int = _DEFAULT_COUNT) -> str:
     }
 
     max_retries = 6
+    result = None
     for attempt in range(max_retries):
         try:
             resp = requests.post(_MCP_URL, headers=headers, json=payload, timeout=30)
             if resp.status_code == 429:
-                wait = 0.5 * (2 ** attempt)
-                print(f"[bailian_search] 429 Rate limit, retry {attempt+1}/{max_retries} after {wait:.1f}s ...")
+                wait = 2.0 * (2 ** attempt)
+                print(f"[bailian_search] HTTP 429, retry {attempt+1}/{max_retries} after {wait:.1f}s ...")
                 time.sleep(wait)
                 continue
             result = resp.json()
-            break
         except Exception as e:
             print(f"[bailian_search] Request error (attempt {attempt+1}): {e}")
             if attempt == max_retries - 1:
                 return f"Bailian search timeout for '{query}', please try again later."
-            time.sleep(1)
+            time.sleep(2)
+            continue
+
+        # 检查 JSON-RPC 层错误
+        if result.get("error"):
+            return f"Bailian search error: {result['error'].get('message', result['error'])}"
+
+        tool_result = result.get("result", {})
+        if tool_result.get("isError"):
+            try:
+                err_body = json.loads(tool_result["content"][0]["text"])
+                app_status = err_body.get("status", 0)
+            except Exception:
+                app_status = 0
+            if app_status == 429:
+                wait = 2.0 * (2 ** attempt)
+                print(f"[bailian_search] App-level 429, retry {attempt+1}/{max_retries} after {wait:.1f}s ...")
+                time.sleep(wait)
+                continue
+            # 其他 isError
+            print(f"[bailian_search] isError for '{query}': {str(tool_result)[:200]}")
+            return f"Bailian search returned an error for '{query}'."
+
+        # 成功
+        break
     else:
-        return f"Bailian search failed for '{query}' after {max_retries} retries."
-
-    # 解析 JSON-RPC 响应
-    if result.get("error"):
-        return f"Bailian search error: {result['error'].get('message', result['error'])}"
-
-    tool_result = result.get("result", {})
-    if tool_result.get("isError"):
-        return f"Bailian search returned an error for '{query}'."
+        return f"Bailian search failed for '{query}' after {max_retries} retries (persistent 429)."
 
     try:
         pages = json.loads(tool_result["content"][0]["text"]).get("pages", [])
@@ -110,5 +141,5 @@ class BailianSearch(BaseTool):
         results = []
         for q in query:
             results.append(bailian_search(q))
-            time.sleep(0.2)
+            time.sleep(0.5)  # 批量查询时每条间隔 0.5s，减少 429
         return "\n=======\n".join(results)

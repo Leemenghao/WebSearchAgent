@@ -131,8 +131,78 @@ class MultiTurnReactAgent(FnCallAgent):
         
         return len(tokenizer.encode(full_prompt))
 
+    def decompose_question(self, question: str) -> str:
+        """两步问题分解：先拆解，再校验，返回格式化的解题计划字符串。失败时返回空字符串。"""
+        from prompt import DECOMPOSER_PROMPT, CHECKER_PROMPT
+
+        # ── Step 1: 分解 ──────────────────────────────────────
+        decompose_msgs = [
+            {"role": "user", "content": DECOMPOSER_PROMPT.format(question=question)}
+        ]
+        raw_plan = self.call_server(decompose_msgs, max_tries=3)
+        if not raw_plan:
+            return ""
+
+        # 清理 markdown 代码块标记
+        raw_plan = raw_plan.strip()
+        if raw_plan.startswith("```"):
+            raw_plan = raw_plan.split("\n", 1)[-1]
+        if raw_plan.endswith("```"):
+            raw_plan = raw_plan.rsplit("```", 1)[0]
+        raw_plan = raw_plan.strip()
+
+        # 提取 JSON 数组
+        left = raw_plan.find('[')
+        right = raw_plan.rfind(']')
+        if left == -1 or right == -1:
+            return ""
+        raw_plan = raw_plan[left:right+1]
+
+        try:
+            steps = json.loads(raw_plan)
+            if not isinstance(steps, list) or len(steps) == 0:
+                return ""
+        except Exception:
+            return ""
+
+        # 单步问题不走 checker
+        if len(steps) > 1:
+            # ── Step 2: 校验 / 精炼 ───────────────────────────────
+            checker_msgs = [
+                {"role": "user", "content": CHECKER_PROMPT.format(
+                    question=question,
+                    plan=json.dumps(steps, ensure_ascii=False, indent=2)
+                )}
+            ]
+            checked = self.call_server(checker_msgs, max_tries=3)
+            if checked:
+                checked = checked.strip()
+                if checked.startswith("```"):
+                    checked = checked.split("\n", 1)[-1]
+                if checked.endswith("```"):
+                    checked = checked.rsplit("```", 1)[0]
+                checked = checked.strip()
+                cl = checked.find('[')
+                cr = checked.rfind(']')
+                if cl != -1 and cr != -1:
+                    try:
+                        refined = json.loads(checked[cl:cr+1])
+                        if isinstance(refined, list) and len(refined) > 0:
+                            steps = refined
+                    except Exception:
+                        pass  # 校验失败保留原始分解
+
+        # ── 格式化为可读计划 ───────────────────────────────────
+        lines = ["[Research Plan]", "Before searching, follow this step-by-step plan:"]
+        for s in steps:
+            lines.append(f"  Step {s.get('step', '?')}: {s.get('task', '')}")
+        lines.append("")
+        plan_text = "\n".join(lines)
+        print(f"[decomposer] Plan ({len(steps)} steps):\n{plan_text}")
+        return plan_text
+
     def _run(self, data: str, model: str, user_prompt: str, **kwargs) -> List[List[Message]]:
-        self.model=model
+        self.model = model
         try:
             question = data['item']['question']
         except: 
@@ -141,7 +211,12 @@ class MultiTurnReactAgent(FnCallAgent):
 
         answer = data['item'].get('answer', '')
         self.user_prompt = user_prompt
-        self.user_prompt = self.user_prompt + question
+        # 前置问题分解：对复杂问题生成解题计划，注入到 prompt 头部
+        plan_text = self.decompose_question(question)
+        if plan_text:
+            self.user_prompt = self.user_prompt + question + plan_text
+        else:
+            self.user_prompt = self.user_prompt + question
         messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": self.user_prompt}]
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0

@@ -7,7 +7,7 @@ import threading
 from datetime import datetime
 from react_agent import MultiTurnReactAgent
 from prompt import SYSTEM_PROMPT_MULTI, USER_PROMPT
-from tool_bailian_search import *
+from tool_search import *
 from tool_visit import *
 
 try:
@@ -34,7 +34,7 @@ if __name__ == "__main__":
                                                                         "hle", "kuan_graph"])
     parser.add_argument("--temperature", type=float, default=0.6)
     parser.add_argument("--top_p", type=float, default=0.95)
-    parser.add_argument("--max_workers", type=int, default=20)
+    parser.add_argument("--max_workers", type=int, default=1)
     parser.add_argument("--sys_prompt", type=str, default="SYSTEM_PROMPT_MULTI")
     parser.add_argument("--roll_out_count", type=int, default=1)
     args = parser.parse_args()

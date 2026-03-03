@@ -133,6 +133,50 @@ confidence: The extracted confidence score between 0|%| and 100|%| from [respons
 is no confidence score available."""
 
 
+# ─────────────────────────────────────────────────────────────
+# 问题分解器 Prompt（两步：分解 → 校验）
+# ─────────────────────────────────────────────────────────────
+
+DECOMPOSER_PROMPT = """You are an expert question analyst specializing in multi-hop, nested-riddle questions.
+
+Your task: decompose the question into an ordered list of **independently searchable sub-tasks**.
+
+Rules:
+1. Each step must be a single, concrete, searchable task.
+2. If a later step depends on the result of an earlier step, explicitly state "result from step N".
+3. The FINAL step must directly answer the original question.
+4. If the question is simple and needs no decomposition, output a single-element array.
+5. Output ONLY a valid JSON array — no explanation, no markdown fences.
+
+Output format:
+[
+  {{"step": 1, "task": "..."}},
+  {{"step": 2, "task": "... (use result from step 1)"}},
+  ...
+]
+
+Question:
+{question}
+"""
+
+
+CHECKER_PROMPT = """You are a plan reviewer for multi-hop research questions.
+
+Original Question:
+{question}
+
+Proposed Plan:
+{plan}
+
+Your task:
+1. Verify every clue / constraint in the question is addressed by at least one step.
+2. Check that steps are in correct logical order (no step uses a result before it is obtained).
+3. Merge any redundant steps; split any step that conflates two independent lookups.
+4. If the plan is already correct and complete, return it unchanged.
+5. Output ONLY a valid JSON array in the same format — no explanation, no markdown fences.
+"""
+
+
 JUDGE_PROMPT_QA = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"].
 First, I will give examples of each grade, and then you will grade a new example.

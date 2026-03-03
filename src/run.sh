@@ -50,7 +50,7 @@ OUTPUT_PATH="${BASE_OUTPUT}/${RUN_ID}"
 ROLL_OUT_COUNT="${2:-1}"
 
 # 并发工作线程数
-MAX_WORKERS="${MAX_WORKERS:-20}"
+MAX_WORKERS="${MAX_WORKERS:-1}"
 
 # 全局汇总文件（追加写入，方便跨轮次比较）
 SUMMARY_PATH="${BASE_OUTPUT}/summary.jsonl"

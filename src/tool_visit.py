@@ -82,7 +82,8 @@ class Visit(BaseTool):
                     model=summary_model,
                     messages=msgs,
                     stop=["\n<tool_response>", "<tool_response>"],
-                    temperature=0.7
+                    temperature=0.7,
+                    timeout=60,
                 )
                 content = chat_response.choices[0].message.content
                 if content:
@@ -211,6 +212,7 @@ class Visit(BaseTool):
                 if len(useful_information) < 10 and summary_retries < 0:
                     print("[visit] Could not generate valid summary after maximum retries")
                     useful_information = "[visit] Failed to read page"
+                print("jinai_return true")
                 return useful_information
                 
             # If we're on the last attempt, return the last result
