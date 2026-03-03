@@ -35,6 +35,7 @@ class MultiTurnReactAgent(FnCallAgent):
                          **kwargs)
         self.llm_generate_cfg = llm["generate_cfg"]
         self.llm_local_path = llm["model"]
+        self.model_type = llm.get("model_type", "")
 
     def call_server(self, msgs, max_tries=10):
         # 使用阿里百炼（DashScope）兼容 OpenAI 接口
@@ -108,10 +109,21 @@ class MultiTurnReactAgent(FnCallAgent):
         return "DashScope API empty response"
 
     def count_tokens(self, messages, model="gpt-4o"):
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(self.llm_local_path)
-        except Exception:
-            # 百炼 API 模式下无本地模型路径，回退到 tiktoken 估算
+        tokenizer = None
+
+        # API 模式（如 qwen_dashscope）不应尝试从 HuggingFace 拉取 tokenizer
+        # 仅当 llm_local_path 是本地存在路径时才用 transformers tokenizer
+        if self.model_type != "qwen_dashscope" and self.llm_local_path and os.path.exists(self.llm_local_path):
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(
+                    self.llm_local_path,
+                    local_files_only=True,
+                )
+            except Exception:
+                tokenizer = None
+
+        if tokenizer is None:
+            # 百炼 API 模式下回退到 tiktoken 估算
             tokenizer = tiktoken.encoding_for_model(model)
         
         full_message = [Message(**x) for x in messages]

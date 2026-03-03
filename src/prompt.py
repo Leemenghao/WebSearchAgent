@@ -46,6 +46,28 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
       "query"
     ]
     }
+},
+{
+  "name": "visit",
+    "description": "Visit webpage(s) and return the summary of the content.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "The URL(s) of the webpage(s) to visit. Can be a single URL or an array of URLs."
+            },
+            "goal": {
+                "type": "string",
+                "description": "The specific information goal for visiting webpage(s)."
+            }
+        },
+        "required": [
+            "url",
+            "goal"
+        ]
+    }
 }
 </tools>
 
