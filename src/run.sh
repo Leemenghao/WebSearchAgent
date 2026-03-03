@@ -7,8 +7,13 @@ set -euo pipefail
 #   bash run.sh [OUTPUT_PATH] [ROLL_OUT_COUNT]
 #
 # 参数说明：
-#   OUTPUT_PATH     预测结果基础输出目录（默认：../output），每次运行在其下生成带时间戳子目录
-#   ROLL_OUT_COUNT  每道题推理轮数（默认：1，竞赛推荐使用 1）
+#   OUTPUT_PATH       预测结果基础输出目录（默认：../output），每次运行在其下生成带时间戳子目录
+#   ROLL_OUT_COUNT    每道题推理轮数（默认：1，竞赛推荐使用 1）
+#   RESUME_OUTPUT_DIR 【续跑模式】指定已有的输出目录，跳过时间戳生成直接追加写入
+#   RESUME_DATA_FILE  【续跑模式】指定自定义数据文件路径（配合 RESUME_OUTPUT_DIR 使用）
+#
+# 续跑示例：
+#   bash run.sh ../output 1 ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining_88.jsonl
 ##############################################################
 
 ######################################
@@ -44,7 +49,18 @@ DATA_FILEPATH="${SCRIPT_DIR}/../data/question.jsonl"
 BASE_OUTPUT="${1:-${SCRIPT_DIR}/../output}"
 
 # 本次运行专属子目录：output/{MODEL_TAG}_{TIMESTAMP}/
-OUTPUT_PATH="${BASE_OUTPUT}/${RUN_ID}"
+# 若第 3 个参数指定了已有目录，则进入续跑模式，直接使用该目录
+if [ -n "${3:-}" ]; then
+    OUTPUT_PATH="${3}"
+    echo "==== Resume mode: using existing output dir ===="
+else
+    OUTPUT_PATH="${BASE_OUTPUT}/${RUN_ID}"
+fi
+
+# 若第 4 个参数指定了自定义数据文件，则覆盖默认数据路径
+if [ -n "${4:-}" ]; then
+    DATA_FILEPATH="${4}"
+fi
 
 # 推理轮数：竞赛默认 1 轮，可由第二个参数指定
 ROLL_OUT_COUNT="${2:-1}"

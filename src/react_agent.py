@@ -132,25 +132,31 @@ class MultiTurnReactAgent(FnCallAgent):
         return len(tokenizer.encode(full_prompt))
 
     def _decomposer_call(self, msgs: list, model: str, max_tries: int = 3,
-                         thinking_budget: int = 4096) -> str:
-        """专用于分解器的 LLM 调用：非流式、开启 thinking（预算受限）、丢弃 thinking 内容只返回正文。"""
+                         enable_thinking: bool = False, thinking_budget: int = 8192) -> str:
+        """专用于分解器的 LLM 调用：非流式，按需开启 thinking。"""
         api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
         api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         client = OpenAI(api_key=api_key, base_url=api_base)
+
+        extra = {"enable_thinking": enable_thinking}
+        if enable_thinking:
+            extra["thinking_budget"] = thinking_budget
 
         for attempt in range(max_tries):
             try:
                 resp = client.chat.completions.create(
                     model=model,
                     messages=msgs,
-                    extra_body={"enable_thinking": True, "thinking_budget": thinking_budget},
+                    extra_body=extra,
                     temperature=0.6,
                 )
                 msg = resp.choices[0].message
                 content = msg.content or ""
-                thinking = getattr(msg, "reasoning_content", None) or ""
-                if thinking:
-                    print(f"[decomposer][{model}] thinking length={len(thinking)} (discarded)")
+                if enable_thinking:
+                    thinking = getattr(msg, "reasoning_content", None) or ""
+                    if thinking:
+                        est_tokens = len(thinking) // 4
+                        print(f"[decomposer][{model}] thinking {len(thinking)} chars (~{est_tokens} tokens, budget={thinking_budget}) (discarded)")
                 if content:
                     return content
             except Exception as e:
@@ -170,7 +176,7 @@ class MultiTurnReactAgent(FnCallAgent):
         decompose_msgs = [
             {"role": "user", "content": DECOMPOSER_PROMPT.format(question=question)}
         ]
-        raw_plan = self._decomposer_call(decompose_msgs, model=decomposer_model)
+        raw_plan = self._decomposer_call(decompose_msgs, model=decomposer_model, enable_thinking=True, thinking_budget=4096)
         if not raw_plan:
             return ""
 
@@ -246,7 +252,7 @@ class MultiTurnReactAgent(FnCallAgent):
             new_tool_results=results_text,
         )}]
 
-        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, thinking_budget=8192)
+        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True)
         if new_facts and len(new_facts.strip()) > 10:
             self.scratchpad = new_facts.strip()
             print(f"[scratchpad] Updated ({len(self.scratchpad)} chars):\n{self.scratchpad}\n")
@@ -267,10 +273,10 @@ class MultiTurnReactAgent(FnCallAgent):
         # 前置问题分解：对复杂问题生成解题计划，注入到 prompt 头部
         plan_text = self.decompose_question(question)
         if plan_text:
-            self.user_prompt = self.user_prompt + question + plan_text
+            user_prompt = self.user_prompt + question + plan_text
         else:
-            self.user_prompt = self.user_prompt + question
-        messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": self.user_prompt}]
+            user_prompt = self.user_prompt + question
+        messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": user_prompt}]
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0
         while num_llm_calls_available > 0:
