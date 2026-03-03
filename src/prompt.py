@@ -198,15 +198,14 @@ Your job: read the tool results below and produce an updated, concise list of CO
 2. Extract NEW confirmed facts from the new tool results; ignore noise/ads/irrelevant content.
 3. If a new result corrects a previous fact, update it and note the correction.
 4. Each fact MUST be a single, specific, verifiable piece of information — NO speculation.
-5. Tag each fact with the research step it resolves, e.g. [Step 1].
+5. Tag each fact with the call number from its prefix, e.g. [Call #3]. Do NOT infer or assign step numbers — only the agent knows which step a call belongs to.
 6. If a fact directly answers the original question, mark it with ★.
 7. Keep total output under 300 words.
 8. Output ONLY the bullet list — no headers, no explanation, no markdown fences.
 
 ## Format
-• [Step N] Confirmed fact.
-• [Step N] Another confirmed fact.
-• ★ [Step N] This fact directly answers the question.
+• [Call #N] Confirmed fact extracted from that call's result.
+• ★ [Call #N] This fact directly answers the question.
 """
 
 

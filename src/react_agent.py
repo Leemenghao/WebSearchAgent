@@ -295,8 +295,10 @@ class MultiTurnReactAgent(FnCallAgent):
 
                 # ── 搜索黑板：每 3 次工具调用更新一次已知事实 ──────────
                 tool_call_count += 1
+                # 前缀带调用序号，scratchpad 模型直接用序号标注，不猜 step
                 pending_tool_results.append(
-                    f"[Tool={tool_name}]\nArgs: {json.dumps(tool_args, ensure_ascii=False)[:300]}\n"
+                    f"[Call #{tool_call_count}: {tool_name}]\n"
+                    f"Query/Args: {json.dumps(tool_args, ensure_ascii=False)[:300]}\n"
                     f"Result: {result[:3000]}"
                 )
                 if tool_call_count % 3 == 0:
