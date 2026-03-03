@@ -13,7 +13,7 @@ set -euo pipefail
 #   RESUME_DATA_FILE  【续跑模式】指定自定义数据文件路径（配合 RESUME_OUTPUT_DIR 使用）
 #
 # 续跑示例：
-#   bash run.sh ../output 1 ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining_88.jsonl
+#   bash run.sh ../output 1 ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining_41.jsonl
 ##############################################################
 
 ######################################
