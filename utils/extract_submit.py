@@ -33,7 +33,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent   # ali_agent_2602/
 DEFAULT_QUESTION = str(_ROOT / "data" / "question.jsonl")
 DEFAULT_PRED = ""   # 需由命令行传入或修改此处
-DEFAULT_OUTPUT = str(_ROOT / "submit" / "submit.jsonl")
+DEFAULT_OUTPUT = ""  # 默认与 --pred 同目录，文件名 submit.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -131,10 +131,13 @@ def main():
         print(f"错误：题目文件不存在: {args.question}", file=sys.stderr)
         sys.exit(1)
 
+    # output 未指定时，默认与 pred 同目录
+    output_path = args.output or str(Path(args.pred).parent / "submit.jsonl")
+
     extract(
         question_path=args.question,
         pred_path=args.pred,
-        output_path=args.output,
+        output_path=output_path,
         do_normalize=args.normalize,
     )
 
