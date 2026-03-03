@@ -302,14 +302,25 @@ class MultiTurnReactAgent(FnCallAgent):
                 if tool_call_count % 3 == 0:
                     self.update_scratchpad(question, plan_text, pending_tool_results)
                     pending_tool_results = []
-                    # 将黑板注入 system message（保留原始 system_message 不变）
                     if self.scratchpad:
+                        # 黑板注入 system message（语义正确：背景知识/指令层）
                         messages[0]["content"] = (
                             self.system_message
                             + "\n\n## 📋 Current Research Facts (Scratchpad)\n"
                             + self.scratchpad
                             + "\n"
                         )
+                        # 同时在最新 tool_response 末尾追加简短 reminder，
+                        # 缓解 recency bias（模型更关注末尾内容）
+                        messages[-1]["content"] += (
+                            "\n\n[Reminder] Key confirmed facts are in the system Scratchpad above. "
+                            "Do NOT re-search what is already confirmed there."
+                        )
+                        # 压缩历史：保留 messages[0](system) + messages[1](原始问题)
+                        # + 最近 6 条消息（3轮对话），其余已被黑板摘要，可丢弃
+                        if len(messages) > 8:
+                            messages = messages[:2] + messages[-6:]
+                            print(f"[scratchpad] History compressed: kept first 2 + last 6 messages")
             if '<answer>' in content and '</answer>' in content:
                 termination = 'answer'
                 break
