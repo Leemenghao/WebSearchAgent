@@ -116,7 +116,7 @@ class Visit(BaseTool):
             "Authorization": f"Bearer {JINA_API_KEY}",
         }
         max_retries = 3
-        timeout = 10
+        timeout = 20
         
         for attempt in range(max_retries):
             try:

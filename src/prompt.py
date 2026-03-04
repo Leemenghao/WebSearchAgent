@@ -30,7 +30,7 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
 <tools>
 {
   "name": "search",
-  "description": "Performs batched web searches via Alibaba Bailian real-time search: supply an array 'query'; the tool retrieves the top 10 results for each query in one call.",
+  "description": "Performs batched web searches: supply an array 'query'; the tool retrieves the top 10 results for each query in one call.",
   "parameters": {
     "type": "object",
     "properties": {
