@@ -229,13 +229,14 @@ class MultiTurnReactAgent(FnCallAgent):
                     except Exception:
                         pass  # 校验失败保留原始分解
 
-        # ── 格式化为可读计划 ───────────────────────────────────
-        lines = ["[Research Plan]", "Before searching, follow this step-by-step plan:"]
-        for s in steps:
-            lines.append(f"  Step {s.get('step', '?')}: {s.get('task', '')}")
-        lines.append("")
-        plan_text = "\n".join(lines)
-        print(f"[decomposer] Plan ({len(steps)} steps):\n{plan_text}")
+
+        plan_json = json.dumps(steps, ensure_ascii=False, indent=2)
+        plan_text = (
+            "\n[Research Plan]\n"
+            "Use this machine-readable plan directly:\n"
+            f"{plan_json}\n"
+        )
+        print(f"[decomposer] Plan JSON ({len(steps)} steps):\n{plan_json}")
         return plan_text
 
     def update_scratchpad(self, question: str, plan_text: str, pending_results: list,

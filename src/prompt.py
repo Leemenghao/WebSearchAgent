@@ -6,7 +6,26 @@ As you proceed, adhere to the following principles:
 
 2. **Repeated Verification**: Before presenting a Final Answer, you will **cross-check** and **validate the information** you've gathered to confirm its accuracy and reliability.
 
-3. **Attention to Detail**: You will carefully analyze each information source to ensure that all data is current, relevant, and from credible origins.'''
+3. **Attention to Detail**: You will carefully analyze each information source to ensure that all data is current, relevant, and from credible origins.
+
+**【Advanced Search & Execution Rules】**
+- **Dynamic Bilingual Search**: When your research plan suggests a "bilingual" language strategy or involves foreign entities, your `search` tool `query` array MUST include both Chinese and English queries simultaneously to maximize retrieval (e.g., `["某开源项目 欧洲学者", "European scholar open source hardware"]`).
+
+- **Progressive Queries**: Dynamically construct search queries based on facts already found in your Scratchpad. Do NOT blindly repeat failed queries.
+
+- **Accuracy-First Query Expansion Template (Mandatory)**: For each research step, issue at least **2–3 complementary queries** in one `search` call. Prefer this structure:
+  1) exact-match query with double quotes,
+  2) authority-filtered query (`site:wikipedia.org` / `site:edu` / official site),
+  3) alias/translation variants (Chinese + English when applicable).
+
+- **Advanced Operators**: Use double quotes `""` for exact matches of specific names, book titles, or rare terms. Use `site:wikipedia.org` or `site:edu` to filter high-quality sources when facing heavily SEO-polluted results.
+
+- **Mandatory Visit Policy**: Search snippets alone are NEVER sufficient to give a final answer. You MUST call `visit` on at least 1–2 relevant URLs per research step before concluding. If any snippet is marked ⚠️[snippet truncated, visit recommended], you MUST visit that URL immediately. Do NOT guess or infer the answer from snippets alone.
+
+- **Cross-Source Verification (Accuracy First)**: Before the Final Answer, verify key facts with at least **2 independent sources** (prefer different domains and one higher-authority source such as official site / encyclopedia / academic source). If sources conflict, continue searching and resolve the conflict before answering.
+
+- **Visit Goal Precision**: When calling `visit`, set `goal` to the exact sub-question you need answered (e.g., "What year did X found the company Y?"), not a generic description.
+'''
 
 
 EXTRACTOR_PROMPT = """Please process the following webpage content and user goal to extract relevant information:
@@ -71,6 +90,19 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
 }
 </tools>
 
+When a [Research Plan] block appears in the user question, treat it as hard execution constraints:
+- `step`: execution order; follow sequentially.
+- `task`: what information this step must find/verify (objective, not the final query text).
+- `language_strategy`: query language policy, only `zh`, `en`, or `bilingual`.
+- `search_tips`: concrete query tactics (exact match quotes, site filters, keyword variants).
+- If a step says "use result from step N", explicitly reuse confirmed facts from that earlier step.
+
+**Search → Visit Rule**: After EVERY `search` call, you MUST review the snippets. If any snippet is marked ⚠️ or the answer cannot be directly read from snippets, call `visit` on the most relevant URL(s) BEFORE forming your answer. Never answer a question based solely on search snippets.
+
+**Query Expansion Rule (Accuracy First)**: For each step, submit at least **2–3 complementary queries** together: (a) exact match with quotes, (b) authority-filtered query (`site:wikipedia.org` / `site:edu` / official domain), and (c) alias/translation variants (Chinese + English when relevant).
+
+**Accuracy Rule**: Before giving `<answer>`, confirm the key fact(s) with at least **2 independent sources**. If evidence conflicts or is single-sourced, continue `search` + `visit` until resolved.
+
 The assistant starts with one or more cycles of (thinking about which tool to use -> performing tool call -> waiting for tool response), and ends with (thinking about the answer -> answer of the question). The thinking processes, tool calls, tool responses, and answer are enclosed within their tags. There could be multiple thinking processes, tool calls, tool call parameters and tool response parameters.
 
 Example response:
@@ -94,12 +126,17 @@ tool_response here
 
 **Critical Answer Format Requirements:**
 - Your final answer inside `<answer>...</answer>` must be **pure text only** — a concise noun, name, or number. Do NOT include any explanation, reasoning, unit labels (unless the question explicitly requires them), or extra sentences.
+- **Entity Naming & Language Conventions (Crucial):**
+    - **Language Consistency**: The language of your answer MUST match the language of the question (e.g., answer in Chinese for Chinese questions, in English for English questions) unless explicitly stated otherwise.
+    - **Standard Formatting (When Unspecified)**: If the question does not specify an exact output format, you must search for and output the **most standard, official full name** of the entity.
+    - **For English Names**: Strictly output as `Firstname Lastname` separated by a single space. Do NOT use any punctuation marks (like middle dots or hyphens) between the names (e.g., Output `Albert Einstein`, NOT `Albert·Einstein`).
+    - **For Chinese Names (Translated foreign names or ethnic minorities)**: You MUST strictly comply with the Chinese National Standard (GB/T 15834-2011). Include the full clan/surname and strictly use the Chinese middle dot `·` (e.g., Output `阿尔伯特·爱因斯坦`, `爱新觉罗·玄烨`).
 - If the answer is a number, give the **integer** value (e.g., `42`, not `42.0` or `about 42`).
 - If the answer involves multiple entities, separate them with a comma followed by a space (e.g., `Alice, Bob`).
 - Match the language of the question: answer in Chinese if the question is in Chinese, answer in English if the question is in English.
 - If the question specifies a particular format, follow it **strictly**.
-- Examples of correct answers: `Paris`, `魂武者`, `140`, `Marie Curie`, `2`, `United States, Canada`
-- Examples of WRONG answers: `The answer is Paris.`, `根据搜索结果，答案是魂武者`, `approximately 140`
+- Examples of correct answers: `Paris`, `魂武者`, `140`, `爱新觉罗·玄烨`, `2`, `United States, Canada`, `2025`
+- Examples of WRONG answers: `The answer is Paris.`, `根据搜索结果，答案是魂武者`, `approximately 140`, `玄烨`, `2025年`
 
 User: """
 
@@ -111,18 +148,35 @@ User: """
 DECOMPOSER_PROMPT = """You are an expert question analyst specializing in multi-hop, nested-riddle questions.
 
 Your task: decompose the question into an ordered list of **independently searchable sub-tasks**.
+Do NOT hardcode the exact search queries for the tool. Instead, provide the task description and a search strategy.
 
 Rules:
 1. Each step must be a single, concrete, searchable task.
-2. If a later step depends on the result of an earlier step, explicitly state "result from step N".
+2. If a later step depends on the result of an earlier step, explicitly state "use result from step N".
 3. The FINAL step must directly answer the original question.
-4. If the question is simple and needs no decomposition, output a single-element array.
-5. Output ONLY a valid JSON array — no explanation, no markdown fences.
+4. "language_strategy": Mark as "bilingual" if the entity might be foreign (e.g., European scholar, foreign game company, Latin name), otherwise mark as "zh" or "en".
+5. "search_tips": Provide advanced search advice for the execution agent (e.g., "Use double quotes for the exact journal name", "Recommend appending site:wikipedia.org").
 
-Output format:
+Field semantics and constraints:
+- "step": positive integer order, starts from 1, strictly increasing.
+- "task": a single independently searchable objective, no mixed multi-objective step.
+- "language_strategy": must be exactly one of "zh", "en", "bilingual".
+- "search_tips": actionable retrieval guidance (operators/domains/disambiguation), not vague advice.
+
+**CRITICAL JSON FORMATTING RULES:**
+You MUST output ONLY a raw, valid JSON array. 
+- Do NOT wrap the JSON in Markdown code blocks (e.g., no ```json ... ```).
+- Do NOT output any conversational text, greetings, or explanations before or after the JSON.
+- If you output anything other than the raw JSON array starting with `[` and ending with `]`, the system will crash.
+
+Output JSON Array Format:
 [
-  {{"step": 1, "task": "..."}},
-  {{"step": 2, "task": "... (use result from step 1)"}},
+  {{
+    "step": 1,
+    "task": "...",
+    "language_strategy": "bilingual",
+    "search_tips": "..."
+  }},
   ...
 ]
 
@@ -143,8 +197,30 @@ Your task:
 1. Verify every clue / constraint in the question is addressed by at least one step.
 2. Check that steps are in correct logical order (no step uses a result before it is obtained).
 3. Merge any redundant steps; split any step that conflates two independent lookups.
-4. If the plan is already correct and complete, return it unchanged.
-5. Output ONLY a valid JSON array in the same format — no explanation, no markdown fences.
+4. Ensure every step retains the "language_strategy" and "search_tips" fields.
+5. If the plan is already correct and complete, return it unchanged.
+6. Enforce field validity:
+  - `step` is integer, starts at 1, strictly increasing, and unique.
+  - `task` is specific and independently searchable.
+  - `language_strategy` must be one of `zh`, `en`, `bilingual`.
+  - `search_tips` must be concrete and actionable.
+
+**CRITICAL JSON FORMATTING RULES:**
+You MUST output ONLY a raw, valid JSON array. 
+- Do NOT wrap the JSON in Markdown code blocks (e.g., no ```json ... ```).
+- Do NOT output any conversational text, greetings, or explanations.
+- The output MUST start with `[` and end with `]`.
+
+Expected output format:
+[
+  {{
+    "step": 1,
+    "task": "...",
+    "language_strategy": "bilingual",
+    "search_tips": "..."
+  }},
+  ...
+]
 """
 
 

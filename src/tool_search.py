@@ -1,12 +1,10 @@
-from qwen_agent.tools.base import BaseTool, register_tool 
+from qwen_agent.tools.base import BaseTool, register_tool
 import json
 from typing import List, Union
 import requests
-from qwen_agent.tools.base import BaseTool, register_tool
 import os
 import time
 
-SEARCH_API_URL = os.getenv("SEARCH_API_URL")
 GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
 
 
@@ -56,7 +54,7 @@ class Search(BaseTool):
                 results = response.json()
                 break
             except Exception as e:
-                print(e)
+                print(f"[search] Request/parse error for query '{query}' (attempt {i+1}/{max_retries}): {e}")
                 if i == max_retries - 1:
                     return f"Google search Timeout, return None, Please try again later."
                 time.sleep(1)
@@ -71,30 +69,46 @@ class Search(BaseTool):
                 raise Exception(f"No results found for query: '{query}'. Use a less specific query.")
 
             web_snippets = list()
+            visit_recommended = []   # 截断/过短 snippet 的 URL，建议 visit
             idx = 0
-            if "organic" in results:
-                for page in results["organic"]:
-                    idx += 1
-                    date_published = ""
-                    if "date" in page:
-                        date_published = "\nDate published: " + page["date"]
+            # 取前10条（按 Google 综合排序返回，通常相关性优先）
+            for page in results["organic"][:10]:
+                idx += 1
+                date_published = ""
+                if "date" in page:
+                    date_published = "\nDate published: " + page["date"]
 
-                    source = ""
-                    if "source" in page:
-                        source = "\nSource: " + page["source"]
+                source = ""
+                if "source" in page:
+                    source = "\nSource: " + page["source"]
 
-                    snippet = ""
-                    if "snippet" in page:
-                        snippet = "\n" + page["snippet"]
+                snippet_text = page.get("snippet", "")
+                snippet = "\n" + snippet_text if snippet_text else ""
 
-                    redacted_version = f"{idx}. [{page['title']}]({page['link']}){date_published}{source}\n{snippet}"
+                # 标记 snippet 截断或过短的结果
+                is_truncated = snippet_text.endswith("...") or snippet_text.endswith("…")
+                is_short = len(snippet_text) < 120
+                if is_truncated or is_short:
+                    visit_flag = " ⚠️[snippet truncated, visit recommended]"
+                    visit_recommended.append(f"#{idx} {page['link']}")
+                else:
+                    visit_flag = ""
 
-                    redacted_version = redacted_version.replace("Your browser can't play this video.", "")
-                    web_snippets.append(redacted_version)
+                redacted_version = f"{idx}. [{page['title']}]({page['link']}){date_published}{source}{snippet}{visit_flag}"
+                redacted_version = redacted_version.replace("Your browser can't play this video.", "")
+                web_snippets.append(redacted_version)
 
-            content = f"A Google search for '{query}' found {len(web_snippets)} results:\n\n## Web Results\n" + "\n\n".join(web_snippets)
+            content = f"A Google search for '{query}' found {len(web_snippets)} results (top 10 shown):\n\n## Web Results\n" + "\n\n".join(web_snippets)
+
+            if visit_recommended:
+                content += (
+                    f"\n\n💡 **Snippets are truncated or too short for these results — you MUST call `visit` on at least one of them to get the full answer:**\n"
+                    + "\n".join(visit_recommended)
+                )
+
             return content
-        except:
+        except Exception as e:
+            print(f"[search] Formatting error for query '{query}': {e}")
             return f"No results found for '{query}'. Try with a more general query, or remove the year filter."
 
 
@@ -102,7 +116,7 @@ class Search(BaseTool):
         assert GOOGLE_SEARCH_KEY is not None, "Please set the GOOGLE_SEARCH_KEY environment variable."
         try:
             query = params["query"]
-        except:
+        except Exception:
             return "[Search] Invalid request format: Input must be a JSON object containing 'query' field"
         
         if isinstance(query, str):
