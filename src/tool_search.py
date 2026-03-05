@@ -4,8 +4,23 @@ from typing import List, Union
 import requests
 import os
 import time
+import threading
 
 GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
+SERPER_MIN_INTERVAL = float(os.getenv("SERPER_MIN_INTERVAL", "0.25"))
+
+_rate_lock = threading.Lock()
+_last_call_time = 0.0
+
+
+def _throttle_serper_calls():
+    global _last_call_time
+    with _rate_lock:
+        now = time.time()
+        gap = now - _last_call_time
+        if gap < SERPER_MIN_INTERVAL:
+            time.sleep(SERPER_MIN_INTERVAL - gap)
+        _last_call_time = time.time()
 
 
 @register_tool("search", allow_overwrite=True)
@@ -44,6 +59,7 @@ class Search(BaseTool):
         max_retries = 8
         for i in range(max_retries):
             try:
+                _throttle_serper_calls()
                 response = requests.post(url, headers=headers, data=json.dumps(data), timeout=15)
                 if response.status_code == 429:
                     # 指数退避：0.5s, 1s, 2s, 4s, 8s ...

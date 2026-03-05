@@ -11,6 +11,7 @@ import random
 
 WEBCONTENT_MAXLENGTH = int(os.getenv("WEBCONTENT_MAXLENGTH", 150000))
 IGNORE_JINA = os.getenv("IGNORE_JINA", "false").lower() == "true"
+VISIT_MAX_WORKERS = int(os.getenv("VISIT_MAX_WORKERS", 2))
 # Visit Tool (Using Jina Reader)
 JINA_READER_URL_PREFIX = "https://r.jina.ai/"
 
@@ -46,7 +47,7 @@ class Visit(BaseTool):
         try:
             url = params["url"]
             goal = params["goal"]
-        except:
+        except Exception:
             return "[Visit] Invalid request format: Input must be a JSON object containing 'url' and 'goal' fields"
 
         if isinstance(url, str):
@@ -54,6 +55,7 @@ class Visit(BaseTool):
         else:
             response = []
             assert isinstance(url, List)
+            max_workers = max(1, min(VISIT_MAX_WORKERS, len(url)))
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {executor.submit(self.readpage, u, goal): u for u in url}
                 for future in as_completed(futures):

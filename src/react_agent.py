@@ -254,7 +254,7 @@ class MultiTurnReactAgent(FnCallAgent):
             new_tool_results=results_text,
         )}]
 
-        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True)
+        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True, thinking_budget=4096)
         if new_facts and len(new_facts.strip()) > 10:
             new_scratchpad = new_facts.strip()
             print(f"[scratchpad] Updated ({len(new_scratchpad)} chars):\n{new_scratchpad}\n")

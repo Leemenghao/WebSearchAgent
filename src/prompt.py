@@ -24,6 +24,8 @@ As you proceed, adhere to the following principles:
 
 - **Cross-Source Verification (Accuracy First)**: Before the Final Answer, verify key facts with at least **2 independent sources** (prefer different domains and one higher-authority source such as official site / encyclopedia / academic source). If sources conflict, continue searching and resolve the conflict before answering.
 
+- **Trap & Ambiguity Detection (Mandatory)**: Explicitly check whether the question contains wording traps (homonyms, aliases, old/new names, title collisions, negation constraints, time/version scope, unit conversion, or "except/not" conditions). If any ambiguity exists, run disambiguation-focused searches first and only answer after the constraint is resolved.
+
 - **Visit Goal Precision**: When calling `visit`, set `goal` to the exact sub-question you need answered (e.g., "What year did X found the company Y?"), not a generic description.
 '''
 
@@ -73,7 +75,7 @@ USER_PROMPT = """A conversation between User and Assistant. The user asks a ques
         "type": "object",
         "properties": {
             "url": {
-                "type": "array",
+                "type": ["string", "array"],
                 "items": {"type": "string"},
                 "description": "The URL(s) of the webpage(s) to visit. Can be a single URL or an array of URLs."
             },
@@ -156,6 +158,7 @@ Rules:
 3. The FINAL step must directly answer the original question.
 4. "language_strategy": Mark as "bilingual" if the entity might be foreign (e.g., European scholar, foreign game company, Latin name), otherwise mark as "zh" or "en".
 5. "search_tips": Provide advanced search advice for the execution agent (e.g., "Use double quotes for the exact journal name", "Recommend appending site:wikipedia.org").
+6. Add at least one dedicated disambiguation step if the question may contain text traps (same-name entities, aliases/translations, negation like "not/except", time/version constraints, unit pitfalls).
 
 Field semantics and constraints:
 - "step": positive integer order, starts from 1, strictly increasing.
@@ -204,6 +207,7 @@ Your task:
   - `task` is specific and independently searchable.
   - `language_strategy` must be one of `zh`, `en`, `bilingual`.
   - `search_tips` must be concrete and actionable.
+7. Ensure the plan explicitly handles potential wording traps and ambiguities (homonyms/aliases, negation constraints, and time/version scope) before the final answer step.
 
 **CRITICAL JSON FORMATTING RULES:**
 You MUST output ONLY a raw, valid JSON array. 

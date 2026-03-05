@@ -143,11 +143,13 @@ if __name__ == "__main__":
         
         system_message = SYSTEM_PROMPT_MULTI + "\nCurrent date: " + datetime.now().strftime("%Y-%m-%d")
         
-        test_agent = MultiTurnReactAgent(
-            llm=llm_cfg,
-            function_list=["search", "visit"],
-            system_message=system_message
-        )
+        def run_single_task(task):
+            agent = MultiTurnReactAgent(
+                llm=llm_cfg,
+                function_list=["search", "visit"],
+                system_message=system_message
+            )
+            return agent._run(task, model, USER_PROMPT)
 
         # Create file write lock
         write_lock = threading.Lock()
@@ -156,10 +158,8 @@ if __name__ == "__main__":
             # Submit tasks
             future_to_task = {
                 executor.submit(
-                    test_agent._run,
-                    task,
-                    model,
-                    USER_PROMPT
+                    run_single_task,
+                    task
                 ): task
                 for task in tasks_to_run
             }
