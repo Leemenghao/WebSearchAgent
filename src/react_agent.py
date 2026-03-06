@@ -37,6 +37,18 @@ class MultiTurnReactAgent(FnCallAgent):
         self.llm_local_path = llm["model"]
         self.model_type = llm.get("model_type", "")
 
+    def _is_uncertain_answer(self, content: str) -> bool:
+        if not content:
+            return False
+        text = content.lower()
+        markers = [
+            "cannot confirm", "can't confirm", "not sure", "uncertain", "likely",
+            "probably", "possibly", "no evidence", "insufficient evidence",
+            "无法确认", "不能确认", "不确定", "可能", "或许", "无法找到",
+            "no such", "best possible answer", "closest match"
+        ]
+        return any(m in text for m in markers)
+
     def call_server(self, msgs, model: str, max_tries=10):
         # 使用阿里百炼（DashScope）兼容 OpenAI 接口
         api_key = os.getenv("DASHSCOPE_API_KEY", "EMPTY")
@@ -265,6 +277,12 @@ class MultiTurnReactAgent(FnCallAgent):
         scratchpad = ""              # 搜索黑板（局部变量，避免线程竞争）
         tool_call_count = 0           # 工具调用总次数
         pending_tool_results = []     # 上次黑板更新后新增的工具结果
+        force_research_on_uncertain = os.getenv("FORCE_RESEARCH_ON_UNCERTAIN", "true").lower() == "true"
+        min_extra_tool_calls = int(os.getenv("MIN_EXTRA_TOOL_CALLS_ON_UNCERTAIN", 5))
+        extra_round_budget = int(os.getenv("EXTRA_LLM_CALL_BUDGET_ON_UNCERTAIN", 10))
+        forced_research_active = False
+        forced_research_done = False
+        forced_tool_calls_remaining = 0
         try:
             question = data['item']['question']
         except: 
@@ -304,6 +322,9 @@ class MultiTurnReactAgent(FnCallAgent):
                 result = "<tool_response>\n" + result + "\n</tool_response>"
                 messages.append({"role": "user", "content": result})
 
+                if forced_research_active and tool_name in {"search", "visit"} and forced_tool_calls_remaining > 0:
+                    forced_tool_calls_remaining -= 1
+
                 # ── 搜索黑板：每 3 次工具调用更新一次已知事实 ──────────
                 tool_call_count += 1
                 # 前缀带调用序号，scratchpad 模型直接用序号标注，不猜 step
@@ -335,6 +356,35 @@ class MultiTurnReactAgent(FnCallAgent):
                             messages = messages[:2] + messages[-6:]
                             print(f"[scratchpad] History compressed: kept first 2 + last 6 messages")
             if '<answer>' in content and '</answer>' in content:
+                if force_research_on_uncertain and self._is_uncertain_answer(content):
+                    if not forced_research_done:
+                        if not forced_research_active:
+                            forced_research_active = True
+                            forced_tool_calls_remaining = min_extra_tool_calls
+                            num_llm_calls_available += extra_round_budget
+                            messages.append({
+                                "role": "user",
+                                "content": (
+                                    "[Hard Constraint] Your previous answer indicates uncertainty or unresolved conflicts. "
+                                    f"Do NOT output <answer> yet. You MUST perform at least {min_extra_tool_calls} additional tool calls "
+                                    "(search/visit), and the new search strategy must be different from before: "
+                                    "use new keyword variants, stricter site filters, and explicit disambiguation queries. "
+                                    "After conflicts are resolved, then output final <answer>."
+                                )
+                            })
+                            continue
+                        if forced_tool_calls_remaining > 0:
+                            messages.append({
+                                "role": "user",
+                                "content": (
+                                    "[Hard Constraint] You still have unresolved mandatory extra verification calls. "
+                                    f"Remaining required tool calls: {forced_tool_calls_remaining}. "
+                                    "Continue with different search strategy and no <answer> yet."
+                                )
+                            })
+                            continue
+                        forced_research_done = True
+                        forced_research_active = False
                 termination = 'answer'
                 break
             if num_llm_calls_available <= 0 and '<answer>' not in content:

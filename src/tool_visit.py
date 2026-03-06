@@ -11,7 +11,7 @@ import random
 
 WEBCONTENT_MAXLENGTH = int(os.getenv("WEBCONTENT_MAXLENGTH", 150000))
 IGNORE_JINA = os.getenv("IGNORE_JINA", "false").lower() == "true"
-VISIT_MAX_WORKERS = int(os.getenv("VISIT_MAX_WORKERS", 2))
+VISIT_MAX_WORKERS = int(os.getenv("VISIT_MAX_WORKERS", 3))
 # Visit Tool (Using Jina Reader)
 JINA_READER_URL_PREFIX = "https://r.jina.ai/"
 

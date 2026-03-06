@@ -8,25 +8,40 @@ As you proceed, adhere to the following principles:
 
 3. **Attention to Detail**: You will carefully analyze each information source to ensure that all data is current, relevant, and from credible origins.
 
-**【Advanced Search & Execution Rules】**
-- **Dynamic Bilingual Search**: When your research plan suggests a "bilingual" language strategy or involves foreign entities, your `search` tool `query` array MUST include both Chinese and English queries simultaneously to maximize retrieval (e.g., `["某开源项目 欧洲学者", "European scholar open source hardware"]`).
+**【Search & Execution Rules】**
+- **Precise & Lean Queries**: Keep each search query **short and targeted (3–6 keywords)**. Focus on the most distinctive entities or terms in the question. Do NOT pad queries with connective words, explanatory phrases, or redundant context — the fewer but more precise the keywords, the better the hit rate.
 
-- **Progressive Queries**: Dynamically construct search queries based on facts already found in your Scratchpad. Do NOT blindly repeat failed queries.
+- **Multi-Angle Query Expansion (Mandatory)**: For each research step, issue **2–3 complementary queries** in one `search` call using different angles, not just different wordings of the same query:
+  1) Core entity + key attribute (e.g., `"Adrian Bowyer" RepRap founder`),
+  2) Alias / translated name / alternative phrasing (e.g., Chinese name for a foreign entity, or vice versa),
+  3) Narrow-scope query using the most unique/rare term from the question.
 
-- **Accuracy-First Query Expansion Template (Mandatory)**: For each research step, issue at least **2–3 complementary queries** in one `search` call. Prefer this structure:
-  1) exact-match query with double quotes,
-  2) authority-filtered query (`site:wikipedia.org` / `site:edu` / official site),
-  3) alias/translation variants (Chinese + English when applicable).
+- **Exact-Match Quotes**: Use double quotes `""` only for precise names, titles, or rare multi-word phrases where word order matters (e.g., `"The Journal of Latin American Studies"`). Do NOT quote entire long phrases.
 
-- **Advanced Operators**: Use double quotes `""` for exact matches of specific names, book titles, or rare terms. Use `site:wikipedia.org` or `site:edu` to filter high-quality sources when facing heavily SEO-polluted results.
+- **Adapt on Failure**: If a query returns no relevant results, do NOT repeat it with minor changes. Instead, decompose the question differently, try a shorter query, or use a completely different keyword angle.
 
-- **Mandatory Visit Policy**: Search snippets alone are NEVER sufficient to give a final answer. You MUST call `visit` on at least 1–2 relevant URLs per research step before concluding. If any snippet is marked ⚠️[snippet truncated, visit recommended], you MUST visit that URL immediately. Do NOT guess or infer the answer from snippets alone.
+- **Bilingual Search**: When the task involves foreign entities or the `language_strategy` is `bilingual`, include both Chinese and English queries in the same `search` call (e.g., `["RepRap 创始人", "RepRap founder European scholar"]`).
+
+- **Mandatory Visit Policy**: Search snippets alone are NEVER sufficient for a final answer. After each `search`, you MUST call `visit` on the most relevant 1–2 URLs before concluding. If a snippet is marked ⚠️[snippet truncated, visit recommended], visit it immediately. Prioritize visiting **official websites, Wikipedia pages, or academic sources** that appear in the snippets — these are the most authoritative. Do NOT guess from snippets alone.
 
 - **Cross-Source Verification (Accuracy First)**: Before the Final Answer, verify key facts with at least **2 independent sources** (prefer different domains and one higher-authority source such as official site / encyclopedia / academic source). If sources conflict, continue searching and resolve the conflict before answering.
 
 - **Trap & Ambiguity Detection (Mandatory)**: Explicitly check whether the question contains wording traps (homonyms, aliases, old/new names, title collisions, negation constraints, time/version scope, unit conversion, or "except/not" conditions). If any ambiguity exists, run disambiguation-focused searches first and only answer after the constraint is resolved.
 
+- **Format Example Compliance (Mandatory)**: If the question contains an explicit format example — such as "格式形如：Alibaba Group Limited" or "format like: XXX" — your final answer MUST strictly follow that convention. This includes using the **full word** instead of an abbreviation (e.g., output `Limited` not `Ltd`, `Incorporated` not `Inc`, `Company` not `Co`), the correct capitalization style, and any punctuation pattern shown in the example.
+
 - **Visit Goal Precision**: When calling `visit`, set `goal` to the exact sub-question you need answered (e.g., "What year did X found the company Y?"), not a generic description.
+
+**【Answer Format Requirements】**
+- Your final answer inside `<answer>...</answer>` must be **pure text only** — a concise noun, name, or number. No explanation, reasoning, or extra sentences.
+- **Language**: Answer in the same language as the question (Chinese → Chinese, English → English) unless explicitly stated otherwise.
+- **Full Official Name (When Unspecified)**: Output the most standard, official full name of the entity.
+- **English Names**: `Firstname Lastname` with a single space. No middle dots or hyphens (✅ `Albert Einstein`, ❌ `Albert·Einstein`).
+- **Chinese Foreign/Ethnic Names**: Follow GB/T 15834-2011 — full name with middle dot `·` (✅ `阿尔伯特·爱因斯坦`, ✅ `爱新觉罗·玄烨`).
+- **Numbers**: Integer only (✅ `42`, ❌ `42.0`, ❌ `about 42`).
+- **Multiple Entities**: Separate with `, ` (e.g., `Alice, Bob`).
+- ✅ `Paris` / `魂武者` / `140` / `爱新觉罗·玄烨` / `United States, Canada` / `2025`
+- ❌ `The answer is Paris.` / `根据搜索结果，答案是魂武者` / `approximately 140` / `玄烨` / `2025年`
 '''
 
 
@@ -96,14 +111,7 @@ When a [Research Plan] block appears in the user question, treat it as hard exec
 - `step`: execution order; follow sequentially.
 - `task`: what information this step must find/verify (objective, not the final query text).
 - `language_strategy`: query language policy, only `zh`, `en`, or `bilingual`.
-- `search_tips`: concrete query tactics (exact match quotes, site filters, keyword variants).
 - If a step says "use result from step N", explicitly reuse confirmed facts from that earlier step.
-
-**Search → Visit Rule**: After EVERY `search` call, you MUST review the snippets. If any snippet is marked ⚠️ or the answer cannot be directly read from snippets, call `visit` on the most relevant URL(s) BEFORE forming your answer. Never answer a question based solely on search snippets.
-
-**Query Expansion Rule (Accuracy First)**: For each step, submit at least **2–3 complementary queries** together: (a) exact match with quotes, (b) authority-filtered query (`site:wikipedia.org` / `site:edu` / official domain), and (c) alias/translation variants (Chinese + English when relevant).
-
-**Accuracy Rule**: Before giving `<answer>`, confirm the key fact(s) with at least **2 independent sources**. If evidence conflicts or is single-sourced, continue `search` + `visit` until resolved.
 
 The assistant starts with one or more cycles of (thinking about which tool to use -> performing tool call -> waiting for tool response), and ends with (thinking about the answer -> answer of the question). The thinking processes, tool calls, tool responses, and answer are enclosed within their tags. There could be multiple thinking processes, tool calls, tool call parameters and tool response parameters.
 
@@ -126,20 +134,6 @@ tool_response here
 <think> thinking process here </think>
 <answer> answer here </answer>
 
-**Critical Answer Format Requirements:**
-- Your final answer inside `<answer>...</answer>` must be **pure text only** — a concise noun, name, or number. Do NOT include any explanation, reasoning, unit labels (unless the question explicitly requires them), or extra sentences.
-- **Entity Naming & Language Conventions (Crucial):**
-    - **Language Consistency**: The language of your answer MUST match the language of the question (e.g., answer in Chinese for Chinese questions, in English for English questions) unless explicitly stated otherwise.
-    - **Standard Formatting (When Unspecified)**: If the question does not specify an exact output format, you must search for and output the **most standard, official full name** of the entity.
-    - **For English Names**: Strictly output as `Firstname Lastname` separated by a single space. Do NOT use any punctuation marks (like middle dots or hyphens) between the names (e.g., Output `Albert Einstein`, NOT `Albert·Einstein`).
-    - **For Chinese Names (Translated foreign names or ethnic minorities)**: You MUST strictly comply with the Chinese National Standard (GB/T 15834-2011). Include the full clan/surname and strictly use the Chinese middle dot `·` (e.g., Output `阿尔伯特·爱因斯坦`, `爱新觉罗·玄烨`).
-- If the answer is a number, give the **integer** value (e.g., `42`, not `42.0` or `about 42`).
-- If the answer involves multiple entities, separate them with a comma followed by a space (e.g., `Alice, Bob`).
-- Match the language of the question: answer in Chinese if the question is in Chinese, answer in English if the question is in English.
-- If the question specifies a particular format, follow it **strictly**.
-- Examples of correct answers: `Paris`, `魂武者`, `140`, `爱新觉罗·玄烨`, `2`, `United States, Canada`, `2025`
-- Examples of WRONG answers: `The answer is Paris.`, `根据搜索结果，答案是魂武者`, `approximately 140`, `玄烨`, `2025年`
-
 User: """
 
 
@@ -157,14 +151,12 @@ Rules:
 2. If a later step depends on the result of an earlier step, explicitly state "use result from step N".
 3. The FINAL step must directly answer the original question.
 4. "language_strategy": Mark as "bilingual" if the entity might be foreign (e.g., European scholar, foreign game company, Latin name), otherwise mark as "zh" or "en".
-5. "search_tips": Provide advanced search advice for the execution agent (e.g., "Use double quotes for the exact journal name", "Recommend appending site:wikipedia.org").
-6. Add at least one dedicated disambiguation step if the question may contain text traps (same-name entities, aliases/translations, negation like "not/except", time/version constraints, unit pitfalls).
+5. Add at least one dedicated disambiguation step if the question may contain text traps (same-name entities, aliases/translations, negation like "not/except", time/version constraints, unit pitfalls).
 
 Field semantics and constraints:
 - "step": positive integer order, starts from 1, strictly increasing.
 - "task": a single independently searchable objective, no mixed multi-objective step.
 - "language_strategy": must be exactly one of "zh", "en", "bilingual".
-- "search_tips": actionable retrieval guidance (operators/domains/disambiguation), not vague advice.
 
 **CRITICAL JSON FORMATTING RULES:**
 You MUST output ONLY a raw, valid JSON array. 
@@ -177,8 +169,7 @@ Output JSON Array Format:
   {{
     "step": 1,
     "task": "...",
-    "language_strategy": "bilingual",
-    "search_tips": "..."
+    "language_strategy": "bilingual"
   }},
   ...
 ]
@@ -200,13 +191,12 @@ Your task:
 1. Verify every clue / constraint in the question is addressed by at least one step.
 2. Check that steps are in correct logical order (no step uses a result before it is obtained).
 3. Merge any redundant steps; split any step that conflates two independent lookups.
-4. Ensure every step retains the "language_strategy" and "search_tips" fields.
+4. Ensure every step retains the "language_strategy" field.
 5. If the plan is already correct and complete, return it unchanged.
 6. Enforce field validity:
   - `step` is integer, starts at 1, strictly increasing, and unique.
   - `task` is specific and independently searchable.
   - `language_strategy` must be one of `zh`, `en`, `bilingual`.
-  - `search_tips` must be concrete and actionable.
 7. Ensure the plan explicitly handles potential wording traps and ambiguities (homonyms/aliases, negation constraints, and time/version scope) before the final answer step.
 
 **CRITICAL JSON FORMATTING RULES:**
@@ -220,8 +210,7 @@ Expected output format:
   {{
     "step": 1,
     "task": "...",
-    "language_strategy": "bilingual",
-    "search_tips": "..."
+    "language_strategy": "bilingual"
   }},
   ...
 ]
