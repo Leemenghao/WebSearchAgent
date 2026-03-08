@@ -63,9 +63,6 @@ if [ -n "${4:-}" ]; then
     DATA_FILEPATH="${4}"
 fi
 
-# 推理轮数：竞赛默认 1 轮，可由第二个参数指定
-ROLL_OUT_COUNT="${2:-1}"
-
 # 并发工作线程数
 MAX_WORKERS="${MAX_WORKERS:-1}"
 
@@ -74,7 +71,7 @@ echo "  Run ID       : $RUN_ID"
 echo "  Data file    : $DATA_FILEPATH"
 echo "  Output dir   : $OUTPUT_PATH"
 echo "  Model        : $MODEL"
-echo "  Rollout count: $ROLL_OUT_COUNT"
+
 echo "  Max workers  : $MAX_WORKERS"
 echo "======================="
 
@@ -96,7 +93,6 @@ uv run python -u run_multi_react.py \
     --model        "$MODEL" \
     --data_filepath "$DATA_FILEPATH" \
     --output       "$OUTPUT_PATH" \
-    --roll_out_count "$ROLL_OUT_COUNT" \
     --max_workers  "$MAX_WORKERS" 
 
 echo "==== Inference completed! ===="

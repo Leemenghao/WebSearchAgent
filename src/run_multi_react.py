@@ -36,12 +36,10 @@ if __name__ == "__main__":
     parser.add_argument("--top_p", type=float, default=0.95)
     parser.add_argument("--max_workers", type=int, default=1)
     parser.add_argument("--sys_prompt", type=str, default="SYSTEM_PROMPT_MULTI")
-    parser.add_argument("--roll_out_count", type=int, default=1)
     args = parser.parse_args()
 
     model = args.model
     output_base = args.output
-    roll_out_count = args.roll_out_count
 
     # Parse model name (the part after the last / in the path)
     model_name = os.path.basename(model.rstrip('/'))
@@ -56,8 +54,6 @@ if __name__ == "__main__":
     print(f"Model name: {model_name}")
     print(f"Dataset name: {args.dataset}")
     print(f"Output directory: {dataset_dir}")
-    print(f"Rollout count: {roll_out_count}")
-
     data_filepath = args.data_filepath if args.data_filepath else f"eval_data/{args.dataset}.jsonl"
     try:
         if data_filepath.endswith(".json"):
@@ -80,69 +76,63 @@ if __name__ == "__main__":
         print(f"Error reading or parsing input file {data_filepath}: {e}")
         exit(1)
 
-    # Create tasks for each rollout
-    for rollout_idx in range(1, roll_out_count + 1):
-        output_file = os.path.join(dataset_dir, f"iter{rollout_idx}.jsonl")
-        
-        print(f"\nStarting rollout {rollout_idx}/{roll_out_count}")
-        print(f"Output file: {output_file}")
-        
-        # Check processed queries
-        processed_queries = set()
-        if os.path.exists(output_file):
+    output_file = os.path.join(dataset_dir, "iter1.jsonl")
+    print(f"Output file: {output_file}")
+
+    # Check processed queries
+    processed_queries = set()
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        data = json.loads(line)
+                        if "question" in data and "error" not in data:
+                            processed_queries.add(data["question"].strip())
+                    except json.JSONDecodeError:
+                        print(f"Warning: Skipping invalid line in output file: {line.strip()}")
+        except FileNotFoundError:
+            pass
+
+    tasks_to_run = []
+    for item in items:
+        question = item.get("question", "").strip()
+        if question == "":
             try:
-                with open(output_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        try:
-                            data = json.loads(line)
-                            # Check for successful completion based on absence of top-level error key
-                            if "question" in data and "error" not in data:
-                                processed_queries.add(data["question"].strip())
-                        except json.JSONDecodeError:
-                            print(f"Warning: Skipping invalid line in output file: {line.strip()}")
-            except FileNotFoundError:
-                pass
-
-        tasks_to_run = []
-        for item in items:
-            question = item.get("question", "").strip()
-            if question == "":
-                try:
-                    user_msg = item["messages"][1]["content"] 
-                    question = user_msg.split("User:")[1].strip() if "User:" in user_msg else user_msg
-                    item["question"] = question
-                except Exception as e:
-                    print(f"Extract question from user message failed: {e}")
-            if not question:
-                print(f"Warning: Skipping item with empty question: {item}")
-                continue
-
-            if question not in processed_queries:
-                tasks_to_run.append({"item": item.copy(), "rollout_id": rollout_idx})
-            else:
-                print(f"Skipping already processed question: {question}")
-
-        print(f"Total questions in input: {len(items)}")
-        print(f"Already successfully processed: {len(processed_queries)}")
-        print(f"Total tasks to run for this rollout: {len(tasks_to_run)}")
-
-        if not tasks_to_run:
-            print(f"Rollout {rollout_idx} completed, skipping")
+                user_msg = item["messages"][1]["content"]
+                question = user_msg.split("User:")[1].strip() if "User:" in user_msg else user_msg
+                item["question"] = question
+            except Exception as e:
+                print(f"Extract question from user message failed: {e}")
+        if not question:
+            print(f"Warning: Skipping item with empty question: {item}")
             continue
 
+        if question not in processed_queries:
+            tasks_to_run.append({"item": item.copy()})
+        else:
+            print(f"Skipping already processed question: {question}")
+
+    print(f"Total questions in input: {len(items)}")
+    print(f"Already successfully processed: {len(processed_queries)}")
+    print(f"Total tasks to run: {len(tasks_to_run)}")
+
+    if not tasks_to_run:
+        print("No tasks to run, skipping")
+    else:
         llm_cfg = {
             'model': model,
             'generate_cfg': {
                 'max_input_tokens': 320000,
-                'max_retries': 10, 
-                'temperature': args.temperature, 
+                'max_retries': 10,
+                'temperature': args.temperature,
                 'top_p': args.top_p
-            }, 
+            },
             'model_type': 'qwen_dashscope'
         }
-        
+
         system_message = SYSTEM_PROMPT_MULTI + "\nCurrent date: " + datetime.now().strftime("%Y-%m-%d")
-        
+
         test_agent = MultiTurnReactAgent(
             llm=llm_cfg,
             function_list=["search", "visit"],
@@ -153,7 +143,6 @@ if __name__ == "__main__":
         write_lock = threading.Lock()
 
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-            # Submit tasks
             future_to_task = {
                 executor.submit(
                     test_agent._run,
@@ -164,21 +153,18 @@ if __name__ == "__main__":
                 for task in tasks_to_run
             }
 
-            for future in tqdm(as_completed(future_to_task), total=len(tasks_to_run), desc=f"Processing Rollout {rollout_idx}"):
+            for future in tqdm(as_completed(future_to_task), total=len(tasks_to_run), desc="Processing"):
                 task_info = future_to_task[future]
                 try:
                     result = future.result()
-                    # Use lock to protect file write operations
                     with write_lock:
                         with open(output_file, "a", encoding="utf-8") as f:
                             f.write(json.dumps(result, ensure_ascii=False) + "\n")
                 except Exception as exc:
-                    print(f'Task for question "{task_info["item"]["question"]}" (Rollout {task_info["rollout_id"]}) generated an exception: {exc}')
-                    # Log error to the output file
+                    print(f'Task for question "{task_info["item"]["question"]}" generated an exception: {exc}')
                     error_result = {
                         "question": task_info["item"]["question"],
                         "answer": task_info["item"].get("answer", ""),
-                        "rollout_id": task_info["rollout_id"],
                         "error": f"Future resolution failed: {exc}",
                         "messages": [],
                         "prediction": "[Failed]",
@@ -186,12 +172,8 @@ if __name__ == "__main__":
                     print("===============================")
                     print(error_result)
                     print("===============================")
-                    
-                    # Also use lock to protect error writing
                     with write_lock:
                         with open(output_file, "a", encoding="utf-8") as f:
                             f.write(json.dumps(error_result, ensure_ascii=False) + "\n")
-        
-        print(f"Rollout {rollout_idx} completed")
-    
-    print(f"\nAll {roll_out_count} rollouts completed!")
+
+    print("\nAll tasks completed!")
