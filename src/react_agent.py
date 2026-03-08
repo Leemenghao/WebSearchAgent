@@ -211,7 +211,7 @@ class MultiTurnReactAgent(FnCallAgent):
                     plan=json.dumps(steps, ensure_ascii=False, indent=2)
                 )}
             ]
-            checked = self._decomposer_call(checker_msgs, model=checker_model, enable_thinking=True, thinking_budget=2048)
+            checked = self._decomposer_call(checker_msgs, model=checker_model)
             if checked:
                 checked = checked.strip()
                 if checked.startswith("```"):
@@ -253,12 +253,15 @@ class MultiTurnReactAgent(FnCallAgent):
             new_tool_results=results_text,
         )}]
 
-        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True)
+        new_facts = self._decomposer_call(msgs, model=scratchpad_model, max_tries=2, enable_thinking=True, thinking_budget=4096)
         if new_facts and len(new_facts.strip()) > 10:
             new_scratchpad = new_facts.strip()
             print(f"[scratchpad] Updated ({len(new_scratchpad)} chars):\n{new_scratchpad}\n")
             return new_scratchpad
         return current_scratchpad
+
+    # check_and_fix_answer 已暫时禁用（可能引入错误修正）。如需重新开启，取消注释即可。
+    # def check_and_fix_answer(self, question: str, answer: str) -> str: ...
 
     def _run(self, data: str, model: str, user_prompt: str, **kwargs) -> List[List[Message]]:
         scratchpad = ""              # 搜索黑板（局部变量，避免线程竞争）
@@ -271,7 +274,7 @@ class MultiTurnReactAgent(FnCallAgent):
             question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg 
 
         answer = data['item'].get('answer', '')
-        # 前置问题分解：对复杂问题生成解题计划，注入到 prompt 头部
+        # 前置问题分解：生成解题计划，注入到 prompt 头部
         plan_text = self.decompose_question(question)
         if plan_text:
             final_user_prompt = user_prompt + question + plan_text
@@ -315,25 +318,31 @@ class MultiTurnReactAgent(FnCallAgent):
                     scratchpad = self.update_scratchpad(question, plan_text, pending_tool_results, scratchpad)
                     pending_tool_results = []
                     if scratchpad:
-                        # 黑板注入 system message（语义正确：背景知识/指令层）
                         messages[0]["content"] = (
                             self.system_message
                             + "\n\n## 📋 Current Research Facts (Scratchpad)\n"
                             + scratchpad
                             + "\n"
                         )
-                        # 同时在最新 tool_response 末尾追加简短 reminder，
-                        # 缓解 recency bias（模型更关注末尾内容）
                         messages[-1]["content"] += (
                             "\n\n[Reminder] Key confirmed facts are in the system Scratchpad above. "
                             "Do NOT re-search what is already confirmed there."
                         )
-                        # 压缩历史：保留 messages[0](system) + messages[1](原始问题)
-                        # + 最近 6 条消息（3轮对话），其余已被黑板摘要，可丢弃
                         if len(messages) > 8:
                             messages = messages[:2] + messages[-6:]
                             print(f"[scratchpad] History compressed: kept first 2 + last 6 messages")
             if '<answer>' in content and '</answer>' in content:
+                # 若模型跳过了 <verify> 直接给答案，强制补一轮验证
+                if '<verify>' not in content and tool_call_count > 0:
+                    print(f"[verify] Missing <verify> block before <answer>, requesting verification...")
+                    messages[-1]['content'] += (
+                        "\n\n⚠️ FORMAT VIOLATION: You must output a `<verify>...</verify>` block "
+                        "before `<answer>`. Go back, write the <verify> block that lists each "
+                        "candidate and checks it against every constraint, then give the final "
+                        "<answer>."
+                    )
+                    num_llm_calls_available -= 1
+                    continue
                 termination = 'answer'
                 break
             if num_llm_calls_available <= 0 and '<answer>' not in content:
@@ -351,7 +360,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 messages.append({"role": "assistant", "content": content.strip()})
                 if '<answer>' in content and '</answer>' in content:
                     prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
-                    answer = prediction
+                    answer = prediction  # check_and_fix_answer 已禁用
                     termination = 'generate an answer as token limit reached'
                 else:
                     prediction = messages[-1]['content']
@@ -368,7 +377,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
         if '<answer>' in messages[-1]['content']:
             prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
-            answer = prediction
+            answer = prediction  # check_and_fix_answer 已禁用
             termination = 'answer'
         else:
             prediction = 'No answer found.'
