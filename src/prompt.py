@@ -151,13 +151,7 @@ Rules:
    a. The FIRST search step should **combine 2–3 constraints into a single query batch** rather than searching one constraint at a time. Include queries that mix the rarest constraint with at least one other constraint — this surfaces candidates that satisfy multiple conditions at once and avoids huge irrelevant result sets. Rarity ranking (most specific → least): **time-specific events** (renamed in year X, founded in year Y) > **membership in a specific named list** (national team roster, award winner list) > **broad category** (school with strong math program). For example, for a question about a school renamed in 2018 whose first-cohort student made the national math team: do NOT search "school renamed in 2018" alone (too broad). Instead search "renamed 2018 middle school math national team" AND "math olympiad national team school renamed 2018" together in one call.
    b. Then filter/verify surviving candidates by remaining constraints, visiting official pages when snippets are insufficient.
    c. Only fall back to single-constraint search if the combined approach yields no results after 2 rounds.
-6. **For long-chain questions (roughly 6+ reasoning hops)**: each step description MUST be more detailed and self-contained. Specifically:
-   a. **Name the concrete search queries to try** — write out the actual query strings, not just a description of what to look for. Example: instead of "find the year the calendar was adopted", write "search '顺治帝 时宪历 颁行年份 西洋天文学' and 'Shixian Calendar adoption year Shunzhi Emperor'".
-   b. **State the expected output** — describe what a successful result looks like (e.g., "expect to find a specific year between 1640–1660", "expect a person's full name").
-   c. **State the verification criterion** — describe exactly what evidence confirms the step is complete before moving on (e.g., "confirmed when two independent sources agree on the same year", "confirmed when the Wikipedia article title matches the candidate name").
-   d. **State the fallback** — what to search next if the primary queries yield nothing useful (e.g., "if no results, try visiting the Baidu Baike page for X").
-   e. Insert explicit **checkpoint steps** every 3–4 hops to consolidate confirmed facts and re-evaluate remaining candidates before continuing down the chain.
-7. Output ONLY a valid JSON array — no explanation, no markdown fences.
+6. Output ONLY a valid JSON array — no explanation, no markdown fences.
 
 Output format:
 [
