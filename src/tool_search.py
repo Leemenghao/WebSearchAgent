@@ -1,8 +1,7 @@
-from qwen_agent.tools.base import BaseTool, register_tool 
+from qwen_agent.tools.base import BaseTool, register_tool
 import json
 from typing import List, Union
 import requests
-from qwen_agent.tools.base import BaseTool, register_tool
 import os
 import time
 
@@ -45,8 +44,10 @@ class Search(BaseTool):
 
         max_retries = 8
         for i in range(max_retries):
+            # 每次重试都建一个新 Session，避免复用已被服务器关闭的连接
+            session = requests.Session()
             try:
-                response = requests.post(url, headers=headers, data=json.dumps(data), timeout=15)
+                response = session.post(url, headers=headers, data=json.dumps(data), timeout=15)
                 if response.status_code == 429:
                     # 指数退避：0.5s, 1s, 2s, 4s, 8s ...
                     wait = 0.5 * (2 ** i)
@@ -56,12 +57,17 @@ class Search(BaseTool):
                 results = response.json()
                 break
             except Exception as e:
-                print(e)
+                print(f"[search] attempt {i+1}/{max_retries} failed: {e}")
                 if i == max_retries - 1:
-                    return f"Google search Timeout, return None, Please try again later."
-                time.sleep(1)
+                    return "Google search failed, please try again later."
+                # SSL/网络错误：指数退避，让服务端恢复
+                wait = 1 * (2 ** i)
+                print(f"[search] retrying after {wait:.1f}s ...")
+                time.sleep(wait)
+            finally:
+                session.close()
         else:
-            return f"Google search failed after {max_retries} retries (rate limit)."
+            return f"Google search failed after {max_retries} retries."
 
         if response.status_code != 200:
             raise Exception(f"Error: {response.status_code} - {response.text}")
