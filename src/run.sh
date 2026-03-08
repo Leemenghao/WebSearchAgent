@@ -4,16 +4,15 @@ set -euo pipefail
 ##############################################################
 # 阿里百炼 Agent 竞赛 —— 一键推理脚本
 # 用法：
-#   bash run.sh [OUTPUT_PATH] [ROLL_OUT_COUNT]
+#   bash run.sh [OUTPUT_PATH] [RESUME_OUTPUT_DIR] [RESUME_DATA_FILE]
 #
 # 参数说明：
 #   OUTPUT_PATH       预测结果基础输出目录（默认：../output），每次运行在其下生成带时间戳子目录
-#   ROLL_OUT_COUNT    每道题推理轮数（默认：1，竞赛推荐使用 1）
 #   RESUME_OUTPUT_DIR 【续跑模式】指定已有的输出目录，跳过时间戳生成直接追加写入
 #   RESUME_DATA_FILE  【续跑模式】指定自定义数据文件路径（配合 RESUME_OUTPUT_DIR 使用）
 #
 # 续跑示例：
-#   bash run.sh ../output 1 ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining_41.jsonl
+#   bash run.sh ../output ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining.jsonl
 ##############################################################
 
 ######################################
@@ -50,17 +49,17 @@ DATA_FILEPATH="${SCRIPT_DIR}/../data/test.jsonl"
 BASE_OUTPUT="${1:-${SCRIPT_DIR}/../output}"
 
 # 本次运行专属子目录：output/{MODEL_TAG}_{TIMESTAMP}/
-# 若第 3 个参数指定了已有目录，则进入续跑模式，直接使用该目录
-if [ -n "${3:-}" ]; then
-    OUTPUT_PATH="${3}"
+# 若第 2 个参数指定了已有目录，则进入续跑模式，直接使用该目录
+if [ -n "${2:-}" ]; then
+    OUTPUT_PATH="${2}"
     echo "==== Resume mode: using existing output dir ===="
 else
     OUTPUT_PATH="${BASE_OUTPUT}/${RUN_ID}"
 fi
 
-# 若第 4 个参数指定了自定义数据文件，则覆盖默认数据路径
-if [ -n "${4:-}" ]; then
-    DATA_FILEPATH="${4}"
+# 若第 3 个参数指定了自定义数据文件，则覆盖默认数据路径
+if [ -n "${3:-}" ]; then
+    DATA_FILEPATH="${3}"
 fi
 
 # 并发工作线程数

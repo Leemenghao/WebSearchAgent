@@ -74,12 +74,17 @@ bash run.sh
 **可选参数：**
 
 ```bash
-# 指定输出目录和推理轮数
-bash run.sh ../output 1
+# 指定输出目录
+bash run.sh ../output
 
-# 续跑模式（跳过已完成题目）
-bash run.sh ../output 1 ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining_41.jsonl
+# 续跑模式（跳过已完成题目，追加写入已有目录）
+bash run.sh ../output ../output/qwen3-max_20260303_233627
+
+# 续跑模式 + 指定自定义数据文件
+bash run.sh ../output ../output/qwen3-max_20260303_233627 ../output/qwen3-max_20260303_233627/qwen3-max/competition/remaining.jsonl
 ```
+
+> **续跑原理**：`run_multi_react.py` 启动时会读取已有输出文件，自动跳过其中已成功完成的题目，无需手动过滤。
 
 ### 5. 提取提交结果
 
