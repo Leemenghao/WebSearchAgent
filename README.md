@@ -2,6 +2,8 @@
 
 基于 **ReAct 架构** 的 WebSearch Agent。
 
+本项目是[阿里云天池比赛（赛题 2：Agent 构建挑战赛）](https://tianchi.aliyun.com/competition/entrance/532448)的参赛作品。
+
 ## 架构概览
 
 ```
